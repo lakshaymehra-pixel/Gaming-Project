@@ -15,9 +15,10 @@ playable core: move, aim, shoot, reload, kill enemies, survive rounds.
 2. Wait for the initial import — several minutes, it is compiling packages and shaders.
 3. **Window → TextMeshPro → Import TMP Essential Resources.** Without the font assets the
    HUD renders nothing.
-4. **Game → Bake Weapon Audio.** Synthesises the gunfire and reload clips into
-   `Assets/Audio`. Do this *before* building a scene — the builder wires whatever clips
-   exist at the time, and warns if they are missing.
+4. **Game → Bake Weapon Audio** and **Game → Bake Jungle Ambience.** Synthesise the
+   gunfire, reload, and soundbed clips into `Assets/Audio`. Do this *before* building a
+   scene — the builder wires whatever clips exist at the time, and warns if they are
+   missing.
 5. **Game → Build Island Scene** (or **Build Arena Scene** for the boxed test map).
 6. Press **Play**. Click inside the Game view first so the cursor locks.
 
@@ -27,13 +28,34 @@ once; step 5 can be re-run whenever the builders change.
 
 ## The two maps
 
-**Island** — a 400 m heightfield with a ragged coastline, sea on every side, 140 trees, 70
-boulders, and five roofless compounds. Every compound wall has a gap in it, so no building
-is a safe box. The terrain, the props, and the spawn placement all come from one seed, so
-the map is reproducible and nothing is downloaded.
+**Island** — a 400 m heightfield with a ragged coastline and sea on every side, grown over
+with jungle: emergent giants with buttress roots and hanging vines, a closed canopy,
+understory, palms, ferns and bushes on the floor, fallen logs, boulders, and five roofless
+compounds. Every compound wall has a gap in it, so no building is a safe box.
+
+The foliage reads as a rainforest because of density and light, not detail. Sight lines are
+short, the fog is green, and the only ambient light from below is near-black — under a
+closed canopy nothing reaches you that has not already passed through leaves.
+
+Everything is generated from one seed and built from primitives, so nothing is downloaded
+and the map is reproducible. Canopy blobs, ferns, vines, and fronds carry no colliders —
+you shoot through leaves and walk under them; trunks, logs, and boulders are solid and
+navigation-static, so they are real cover and the NavMesh carves around them.
 
 **Arena** — a walled box with cover crates. Faster to iterate on when the thing being
 tested is a weapon or an AI change rather than the level.
+
+### Tuning the jungle
+
+`JungleDensity` in `IslandSceneBuilder` scales every foliage layer at once. If a phone drops
+frames, turn that down before touching anything else — the cost is draw calls, not
+triangles, which is why every prop is flagged batching-static.
+
+### Replacing the trees with real assets
+
+`JungleFoliage.MakeTree`, `MakePalm`, and `MakeGroundCover` are the only places that build
+geometry. Swapping them for `Instantiate(prefab)` against an imported tree pack leaves the
+layout, the density falloff, the collider rules, and the batching untouched.
 
 ## Controls
 

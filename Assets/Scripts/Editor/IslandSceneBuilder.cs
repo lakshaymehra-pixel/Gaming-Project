@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Game.Core;
 using Game.Enemies;
 using Game.Player;
@@ -12,7 +12,7 @@ namespace Game.EditorTools
     /// <summary>
     /// Builds the island map: a real terrain with a coastline, sea, scattered cover, and
     /// ruins to fight around. The player rig, enemy prefab, spawner, game loop, and HUD are
-    /// reused from ArenaSceneBuilder — only the world changes, so the two maps cannot drift
+    /// reused from ArenaSceneBuilder â€” only the world changes, so the two maps cannot drift
     /// apart in how they play.
     ///
     /// Everything here is generated rather than modelled: no downloaded assets, nothing that
@@ -31,6 +31,10 @@ namespace Game.EditorTools
         private const float SeaLevel = 3f;
         private const int HeightmapResolution = 257;
         private const int Seed = 20260711;
+
+        /// <summary>Scales every foliage layer at once. Turn this down before touching the
+        /// tree models if a phone drops frames.</summary>
+        private const float JungleDensity = 1f;
 
         [MenuItem("Game/Build Island Scene")]
         public static void Build()
@@ -51,9 +55,14 @@ namespace Game.EditorTools
             BuildSea(island, islandMats);
 
             var rng = new System.Random(Seed);
-            ScatterTrees(island, islandMats, rng);
+
+            // Density is the whole point of a jungle. If a phone cannot hold frame rate,
+            // this multiplier is the dial to turn â€” not the tree models.
+            JungleFoliage.Grow(island, JungleFoliage.CreatePalette(), rng, JungleDensity);
+
             ScatterRocks(island, islandMats, rng);
             BuildRuins(island, islandMats, rng);
+            BuildAmbience(island);
 
             Transform playerSpawn = PlacePlayerSpawn(island, rng);
             PlayerController player = ArenaSceneBuilder.BuildPlayer(playerSpawn, mats, out _);
@@ -72,12 +81,49 @@ namespace Game.EditorTools
             GameObjectUtility.SetStaticEditorFlags(
                 terrain.gameObject, StaticEditorFlags.NavigationStatic);
 
+            MarkFoliageStatic();
+
             ArenaSceneBuilder.BakeNavMesh();
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             ArenaSceneBuilder.AddSceneToBuildSettings(ScenePath);
 
             Debug.Log($"<b>Island built.</b> Saved to {ScenePath}. Press Play to test.");
+        }
+
+        /// <summary>
+        /// Flags every piece of foliage as batching-static. A thousand trees is several
+        /// thousand renderers, and issuing a draw call per leaf-blob is what would actually
+        /// kill the frame rate on a phone — not the triangle count. Batching collapses them
+        /// into a handful of calls per material.
+        ///
+        /// Run after the props exist and before the NavMesh bake, so the bake sees the final
+        /// flags.
+        /// </summary>
+        private static void MarkFoliageStatic()
+        {
+            GameObject jungle = GameObject.Find("Jungle");
+            if (jungle == null) return;
+
+            int count = 0;
+
+            foreach (Transform t in jungle.GetComponentsInChildren<Transform>())
+            {
+                if (t.GetComponent<Renderer>() == null) continue;
+
+                // Preserve whatever navigation flag the prop already carries — trunks and logs
+                // are navigation-static so agents path around them, leaves are not — and add
+                // batching on top.
+                StaticEditorFlags flags =
+                    GameObjectUtility.GetStaticEditorFlags(t.gameObject);
+
+                GameObjectUtility.SetStaticEditorFlags(
+                    t.gameObject, flags | StaticEditorFlags.BatchingStatic);
+
+                count++;
+            }
+
+            Debug.Log($"Jungle: marked {count} renderers batching-static.");
         }
 
         // --------------------------------------------------------------------- materials
@@ -98,28 +144,116 @@ namespace Game.EditorTools
 
         // ---------------------------------------------------------------------- lighting
 
+        /// <summary>
+        /// Rainforest light: a low, warm sun raking through the canopy, and ambient light
+        /// that is green from above and near-black from below â€” under a closed canopy the
+        /// only light that reaches you has already passed through leaves.
+        ///
+        /// The fog is doing most of the work. Sight lines in a jungle are short, and the haze
+        /// is what makes the density read as depth rather than as clutter.
+        /// </summary>
         private static void BuildLighting()
         {
             var sunGo = new GameObject("Sun");
             Light sun = sunGo.AddComponent<Light>();
             sun.type = LightType.Directional;
-            sun.intensity = 1.25f;
-            sun.color = new Color(1f, 0.95f, 0.85f);
+            sun.intensity = 1.35f;
+            sun.color = new Color(1f, 0.93f, 0.72f);          // warm, low, late-afternoon
             sun.shadows = LightShadows.Soft;
-            sunGo.transform.rotation = Quaternion.Euler(42f, 145f, 0f);
+            sun.shadowStrength = 0.85f;
+            sunGo.transform.rotation = Quaternion.Euler(26f, 132f, 0f);
 
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor     = new Color(0.55f, 0.65f, 0.80f);
-            RenderSettings.ambientEquatorColor = new Color(0.45f, 0.48f, 0.45f);
-            RenderSettings.ambientGroundColor  = new Color(0.25f, 0.24f, 0.20f);
+            RenderSettings.ambientSkyColor     = new Color(0.34f, 0.45f, 0.30f);
+            RenderSettings.ambientEquatorColor = new Color(0.20f, 0.27f, 0.18f);
+            RenderSettings.ambientGroundColor  = new Color(0.07f, 0.09f, 0.06f);
+            RenderSettings.ambientIntensity = 0.9f;
 
-            // Haze over the water sells the scale and hides the terrain's hard edge where it
-            // meets the sea plane.
             RenderSettings.fog = true;
-            RenderSettings.fogColor = new Color(0.62f, 0.72f, 0.82f);
-            RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogStartDistance = 90f;
-            RenderSettings.fogEndDistance = 420f;
+            RenderSettings.fogColor = new Color(0.44f, 0.53f, 0.42f);   // green haze
+            RenderSettings.fogMode = FogMode.Exponential;
+            RenderSettings.fogDensity = 0.012f;                          // ~80m visibility
+        }
+
+        /// <summary>
+        /// The soundbed. Insects, birds, and wind are 2D and ride with the listener; the
+        /// river is a positioned source that rolls off, so it tells you where the water is.
+        /// </summary>
+        private static void BuildAmbience(IslandTerrain island)
+        {
+            var root = new GameObject("Ambience");
+
+            AudioSource insects = MakeAmbientSource(root.transform, "Insects", "AMB_Insects", 0.30f);
+            AudioSource birds   = MakeAmbientSource(root.transform, "Birds",   "AMB_Birds",   0.22f);
+            AudioSource wind    = MakeAmbientSource(root.transform, "Wind",    "AMB_Wind",    0.26f);
+
+            // Water sits at the shoreline on one side of the island, spatialised, so walking
+            // toward the coast brings it up.
+            AudioSource water = MakeAmbientSource(root.transform, "Water", "AMB_Water", 0.55f);
+            if (water != null)
+            {
+                water.spatialBlend = 1f;
+                water.rolloffMode = AudioRolloffMode.Linear;
+                water.minDistance = 8f;
+                water.maxDistance = 70f;
+                water.loop = true;
+                water.playOnAwake = true;
+                water.transform.position = new Vector3(
+                    island.Size * 0.5f, island.SeaLevel + 1f, island.Size * 0.08f);
+            }
+
+            var roarGo = new GameObject("Roar");
+            roarGo.transform.SetParent(root.transform, false);
+            var roar = roarGo.AddComponent<AudioSource>();
+            roar.playOnAwake = false;
+            roar.spatialBlend = 1f;
+            roar.rolloffMode = AudioRolloffMode.Linear;
+            roar.minDistance = 15f;
+            roar.maxDistance = 120f;
+            roar.volume = 0.8f;
+
+            var controller = root.AddComponent<AmbienceController>();
+            ArenaSceneBuilder.SetPrivate(controller, "insects", insects);
+            ArenaSceneBuilder.SetPrivate(controller, "birds", birds);
+            ArenaSceneBuilder.SetPrivate(controller, "wind", wind);
+            ArenaSceneBuilder.SetPrivate(controller, "roarSource", roar);
+
+            var roarClip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/AMB_Roar.wav");
+            if (roarClip != null)
+                ArenaSceneBuilder.SetPrivate(controller, "roarClip", roarClip);
+            else
+                Debug.LogWarning("Ambience: AMB_Roar not found. Run Game > Bake Jungle Ambience.");
+
+            // The listener is the camera, which is buried in the player rig; the controller
+            // needs it to place the roar relative to the player.
+            var listener = Object.FindFirstObjectByType<AudioListener>();
+            if (listener != null)
+                ArenaSceneBuilder.SetPrivate(controller, "listener", listener.transform);
+        }
+
+        private static AudioSource MakeAmbientSource(Transform parent, string name,
+                                                     string clipName, float volume)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+
+            var source = go.AddComponent<AudioSource>();
+            source.playOnAwake = false;      // AmbienceController starts them
+            source.loop = true;
+            source.spatialBlend = 0f;
+            source.volume = volume;
+
+            var clip = AssetDatabase.LoadAssetAtPath<AudioClip>($"Assets/Audio/{clipName}.wav");
+            if (clip == null)
+            {
+                Debug.LogWarning(
+                    $"Ambience: {clipName} not found. Run Game > Bake Jungle Ambience, " +
+                    "then rebuild the island.");
+                return source;
+            }
+
+            source.clip = clip;
+            return source;
         }
 
         // ----------------------------------------------------------------------- terrain
@@ -143,7 +277,7 @@ namespace Game.EditorTools
             Terrain terrain = go.GetComponent<Terrain>();
 
             // Layer-splatting the sand/grass/rock bands would need textures on disk. A single
-            // flat layer keeps the look deliberately plain and the repo asset-free — the
+            // flat layer keeps the look deliberately plain and the repo asset-free â€” the
             // gameplay silhouette comes from the heightfield, not the texture.
             var layer = new TerrainLayer
             {
@@ -192,61 +326,6 @@ namespace Game.EditorTools
 
         // ------------------------------------------------------------------------- props
 
-        private static void ScatterTrees(IslandTerrain island, IslandMats mats,
-                                         System.Random rng)
-        {
-            var root = new GameObject("Trees").transform;
-            const int count = 140;
-
-            for (int i = 0; i < count; i++)
-            {
-                // Trees want ground that is inland, dry, and not a cliff face.
-                if (!island.TryFindFlatLand(rng, island.SeaLevel + 2f, 28f, 15f, 20,
-                                            out Vector3 p))
-                    continue;
-
-                float height = 5f + (float)rng.NextDouble() * 5f;
-                float trunkR = 0.22f + (float)rng.NextDouble() * 0.14f;
-
-                var tree = new GameObject($"Tree_{i}");
-                tree.transform.SetParent(root, false);
-                tree.transform.position = p;
-                tree.transform.rotation = Quaternion.Euler(
-                    0f, (float)rng.NextDouble() * 360f, 0f);
-
-                GameObject trunk = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                trunk.name = "Trunk";
-                trunk.transform.SetParent(tree.transform, false);
-                trunk.transform.localPosition = new Vector3(0f, height * 0.5f, 0f);
-                trunk.transform.localScale = new Vector3(trunkR, height * 0.5f, trunkR);
-                trunk.GetComponent<Renderer>().sharedMaterial = mats.Trunk;
-
-                // Two offset canopy spheres read as foliage from a distance and cost nothing.
-                for (int c = 0; c < 2; c++)
-                {
-                    GameObject canopy = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                    canopy.name = $"Canopy_{c}";
-                    canopy.transform.SetParent(tree.transform, false);
-                    canopy.transform.localPosition = new Vector3(
-                        ((float)rng.NextDouble() - 0.5f) * 1.2f,
-                        height + c * 1.1f,
-                        ((float)rng.NextDouble() - 0.5f) * 1.2f);
-                    float r = (3.2f - c * 0.7f) + (float)rng.NextDouble();
-                    canopy.transform.localScale = new Vector3(r, r * 0.75f, r);
-                    canopy.GetComponent<Renderer>().sharedMaterial = mats.Leaves;
-
-                    // Canopies must not block bullets or the NavMesh — you shoot through
-                    // leaves, and agents walk under them.
-                    Object.DestroyImmediate(canopy.GetComponent<SphereCollider>());
-                }
-
-                // The trunk stays solid and navigation-static, so it is real cover and the
-                // NavMesh carves around it.
-                GameObjectUtility.SetStaticEditorFlags(
-                    trunk, StaticEditorFlags.NavigationStatic);
-            }
-        }
-
         private static void ScatterRocks(IslandTerrain island, IslandMats mats,
                                          System.Random rng)
         {
@@ -282,7 +361,7 @@ namespace Game.EditorTools
         }
 
         /// <summary>
-        /// Roofless walled compounds. These are the fights worth having — somewhere to break
+        /// Roofless walled compounds. These are the fights worth having â€” somewhere to break
         /// line of sight, corners to hold, and a reason to move rather than snipe from a hill.
         /// </summary>
         private static void BuildRuins(IslandTerrain island, IslandMats mats,
@@ -444,7 +523,7 @@ namespace Game.EditorTools
             else if (points.Count < wanted)
             {
                 Debug.LogWarning(
-                    $"Island: placed {points.Count}/{wanted} enemy spawns — the coastline " +
+                    $"Island: placed {points.Count}/{wanted} enemy spawns â€” the coastline " +
                     "may be tighter than the spawn constraints allow.");
             }
 

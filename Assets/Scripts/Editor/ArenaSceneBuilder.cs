@@ -924,7 +924,7 @@ namespace Game.EditorTools
         /// fields private on purpose; this is the editor-only escape hatch that lets the
         /// builder wire them without widening the runtime API.
         /// </summary>
-        private static void SetPrivate(Object target, string field, object value)
+        internal static void SetPrivate(Object target, string field, object value)
         {
             var so = new SerializedObject(target);
             SerializedProperty prop = so.FindProperty(field);
