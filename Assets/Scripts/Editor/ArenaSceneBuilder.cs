@@ -917,8 +917,16 @@ namespace Game.EditorTools
             // Qualified because UnityEngine.AI declares a NavMeshBuilder too, and the file
             // imports both namespaces. The editor one is the baker; the runtime one builds
             // NavMeshData at play time and cannot write the scene's baked surface.
+            //
+            // Deprecated, and staying anyway: this baker is the only one that honours the
+            // NavigationStatic flags every prop in these builders is marked with. Its
+            // replacement, NavMeshSurface, ignores static flags and collects by collider or
+            // volume instead — migrating means re-auditing which of ~1300 props end up in
+            // the walkable set, for zero behavioural gain today.
+#pragma warning disable 618
             UnityEditor.AI.NavMeshBuilder.ClearAllNavMeshes();
             UnityEditor.AI.NavMeshBuilder.BuildNavMesh();
+#pragma warning restore 618
         }
 
         // -------------------------------------------------------------------------- utils
