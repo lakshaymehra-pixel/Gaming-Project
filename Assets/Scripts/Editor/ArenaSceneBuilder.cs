@@ -319,19 +319,69 @@ namespace Game.EditorTools
             TryWireClip(weapon, "reloadClip", "SFX_Reload");
             TryWireClip(weapon, "emptyClip",  "SFX_Empty");
 
+            SetPrivate(weapon, "muzzleFlash", BuildMuzzleFlash(muzzle));
+
             root.AddComponent<PlayerInputHub>();
 
             var motor = root.AddComponent<PlayerMotor>();
             var look = root.AddComponent<PlayerLook>();
             SetPrivate(look, "cameraPivot", pivot);
 
+            // The animator owns the gun's local transform from here on, so the position set
+            // on the model above is only its rest pose.
+            var animator = gunModel.AddComponent<WeaponAnimator>();
+            SetPrivate(animator, "weapon", weapon);
+            SetPrivate(animator, "motor", motor);
+
             var controller = root.AddComponent<PlayerController>();
             SetPrivate(controller, "weapon", weapon);
             SetPrivate(controller, "recoil", recoil);
+            SetPrivate(controller, "weaponAnimator", animator);
             SetPrivate(controller, "viewCamera", cam);
+            SetPrivate(controller, "cameraPivot", pivot);
 
             weaponOwner = camGo;
             return controller;
+        }
+
+        /// <summary>
+        /// Muzzle flash as a two-particle burst. Emission is off — Weapon calls Play() per
+        /// shot, so the flash is exactly as fast as the fire rate and never free-runs.
+        /// </summary>
+        private static ParticleSystem BuildMuzzleFlash(Transform muzzle)
+        {
+            var go = new GameObject("MuzzleFlash");
+            go.transform.SetParent(muzzle, false);
+
+            var ps = go.AddComponent<ParticleSystem>();
+            ps.Stop();
+
+            var main = ps.main;
+            main.duration = 0.1f;
+            main.loop = false;
+            main.playOnAwake = false;
+            main.startLifetime = 0.045f;
+            main.startSpeed = 2.5f;
+            main.startSize = 0.22f;
+            main.startColor = new Color(1f, 0.82f, 0.35f);
+            main.simulationSpace = ParticleSystemSimulationSpace.Local;
+
+            var emission = ps.emission;
+            emission.enabled = true;
+            emission.rateOverTime = 0f;
+            emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 2, 3) });
+
+            var shape = ps.shape;
+            shape.shapeType = ParticleSystemShapeType.Cone;
+            shape.angle = 14f;
+            shape.radius = 0.02f;
+
+            var renderer = go.GetComponent<ParticleSystemRenderer>();
+            renderer.material = MakeMaterial("M_MuzzleFlash", new Color(1f, 0.85f, 0.4f));
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+
+            return ps;
         }
 
         private static TracerPool BuildTracerPool(Mats mats)
@@ -595,9 +645,17 @@ namespace Game.EditorTools
             // Touch controls
             VirtualJoystick joystick = BuildJoystick(c);
             TouchLookArea lookArea = BuildLookArea(c);
+            // Right thumb: fire under the pad, everything else ringed around it.
             HoldButton fire   = BuildHoldButton(c, "FireButton",   "FIRE",   new Vector2(1f, 0f), new Vector2(-190f, 190f), 150f);
             HoldButton aim    = BuildHoldButton(c, "AimButton",    "AIM",    new Vector2(1f, 0f), new Vector2(-370f, 300f), 110f);
             HoldButton reload = BuildHoldButton(c, "ReloadButton", "RELOAD", new Vector2(1f, 0f), new Vector2(-190f, 380f), 110f);
+            HoldButton jump   = BuildHoldButton(c, "JumpButton",   "JUMP",   new Vector2(1f, 0f), new Vector2(-360f, 130f), 110f);
+
+            // Left thumb: sprint and slide sit beside the move stick, where the thumb already is.
+            HoldButton sprint = BuildHoldButton(c, "SprintButton", "RUN",    new Vector2(0f, 0f), new Vector2(510f, 300f), 110f);
+            HoldButton slide  = BuildHoldButton(c, "SlideButton",  "SLIDE",  new Vector2(0f, 0f), new Vector2(530f, 150f), 110f);
+
+            Minimap minimap = BuildMinimap(c, player.transform);
 
             // Game over
             var gameOverGo = new GameObject("GameOverPanel", typeof(Image));
@@ -635,10 +693,89 @@ namespace Game.EditorTools
             SetPrivate(input, "fireButton", fire);
             SetPrivate(input, "aimButton", aim);
             SetPrivate(input, "reloadButton", reload);
+            SetPrivate(input, "jumpButton", jump);
+            SetPrivate(input, "sprintButton", sprint);
+            SetPrivate(input, "slideButton", slide);
 
             // The look area must sit behind every button, or it swallows their touches.
             lookArea.transform.SetAsFirstSibling();
             vignette.transform.SetAsFirstSibling();
+        }
+
+        /// <summary>
+        /// Radar in the top-left: a second orthographic camera renders the world into a
+        /// RenderTexture, and Minimap draws enemy blips over it as UI. It culls to the
+        /// default layer only, so the player capsule and the HUD never appear on it.
+        /// </summary>
+        private static Minimap BuildMinimap(Transform canvas, Transform player)
+        {
+            const float size = 240f;
+
+            var frame = new GameObject("Minimap", typeof(RectTransform), typeof(Image));
+            frame.transform.SetParent(canvas, false);
+
+            var frameRt = frame.GetComponent<RectTransform>();
+            frameRt.anchorMin = frameRt.anchorMax = new Vector2(0f, 1f);
+            frameRt.pivot = new Vector2(0.5f, 0.5f);
+            frameRt.anchoredPosition = new Vector2(size * 0.5f + 30f, -(size * 0.5f + 30f));
+            frameRt.sizeDelta = new Vector2(size, size);
+
+            var frameImage = frame.GetComponent<Image>();
+            frameImage.color = new Color(0f, 0f, 0f, 0.55f);
+            frameImage.raycastTarget = false;
+
+            var rt = new RenderTexture(256, 256, 16) { name = "RT_Minimap" };
+            AssetDatabase.CreateAsset(rt, "Assets/Settings/RT_Minimap.renderTexture");
+
+            var camGo = new GameObject("MinimapCamera");
+            Camera cam = camGo.AddComponent<Camera>();
+            cam.orthographic = true;
+            cam.targetTexture = rt;
+            cam.clearFlags = CameraClearFlags.SolidColor;
+            cam.backgroundColor = new Color(0.10f, 0.12f, 0.14f);
+            cam.cullingMask = 1;                      // default layer: terrain, props, ruins
+            cam.farClipPlane = 250f;
+
+            // Rendering the map view costs a second pass over the scene; skipping the
+            // expensive parts of it keeps that cheap on a phone.
+            cam.allowHDR = false;
+            cam.allowMSAA = false;
+
+            // MakeImage gives us the RectTransform sized and anchored correctly, but an Image
+            // cannot display a RenderTexture — only a RawImage can — so the component is
+            // swapped out and the transform kept.
+            RectTransform view = MakeImage(frame.transform, "MapView", Color.white,
+                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(size - 10f, size - 10f));
+            Object.DestroyImmediate(view.GetComponent<Image>());
+
+            var raw = view.gameObject.AddComponent<RawImage>();
+            raw.texture = rt;
+            raw.raycastTarget = false;
+
+            var blipContainer = new GameObject("Blips", typeof(RectTransform));
+            blipContainer.transform.SetParent(view, false);
+            RectTransform blipRt = blipContainer.GetComponent<RectTransform>();
+            Stretch(blipRt);
+
+            // Prefab for a single enemy dot. Instantiated on demand by Minimap.
+            RectTransform blip = MakeImage(canvas, "BlipPrefab",
+                new Color(0.95f, 0.25f, 0.2f), new Vector2(0.5f, 0.5f), Vector2.zero,
+                new Vector2(12f, 12f));
+            blip.gameObject.SetActive(false);
+
+            RectTransform arrow = MakeImage(view, "PlayerArrow",
+                new Color(0.35f, 0.9f, 1f), new Vector2(0.5f, 0.5f), Vector2.zero,
+                new Vector2(16f, 16f));
+
+            var minimap = frame.AddComponent<Minimap>();
+            SetPrivate(minimap, "player", player);
+            SetPrivate(minimap, "minimapCamera", cam);
+            SetPrivate(minimap, "mapRect", view);
+            SetPrivate(minimap, "playerArrow", arrow);
+            SetPrivate(minimap, "blipContainer", blipRt);
+            SetPrivate(minimap, "blipPrefab", blip.GetComponent<Image>());
+
+            return minimap;
         }
 
         private static VirtualJoystick BuildJoystick(Transform parent)

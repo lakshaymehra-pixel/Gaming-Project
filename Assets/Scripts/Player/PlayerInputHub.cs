@@ -17,6 +17,8 @@ namespace Game.Player
         [SerializeField] private HoldButton reloadButton;
         [SerializeField] private HoldButton aimButton;
         [SerializeField] private HoldButton jumpButton;
+        [SerializeField] private HoldButton sprintButton;
+        [SerializeField] private HoldButton slideButton;
 
         [Header("Desktop fallback")]
         [SerializeField] private bool allowKeyboardMouse = true;
@@ -26,10 +28,10 @@ namespace Game.Player
         public Vector2 Look { get; private set; }
         public bool FireHeld { get; private set; }
         public bool AimHeld { get; private set; }
+        public bool SprintHeld { get; private set; }
         public bool ReloadPressed { get; private set; }
         public bool JumpPressed { get; private set; }
-
-        private bool UseTouch => moveJoystick != null && Application.isMobilePlatform;
+        public bool SlidePressed { get; private set; }
 
         private void Update()
         {
@@ -37,8 +39,10 @@ namespace Game.Player
             Look = Vector2.zero;
             FireHeld = false;
             AimHeld = false;
+            SprintHeld = false;
             ReloadPressed = false;
             JumpPressed = false;
+            SlidePressed = false;
 
             ReadTouch();
 
@@ -52,8 +56,10 @@ namespace Game.Player
             if (lookArea != null) Look += lookArea.ConsumeDelta();
             if (fireButton != null) FireHeld |= fireButton.IsHeld;
             if (aimButton != null) AimHeld |= aimButton.IsHeld;
+            if (sprintButton != null) SprintHeld |= sprintButton.IsHeld;
             if (reloadButton != null) ReloadPressed |= reloadButton.ConsumePress();
             if (jumpButton != null) JumpPressed |= jumpButton.ConsumePress();
+            if (slideButton != null) SlidePressed |= slideButton.ConsumePress();
         }
 
         private void ReadKeyboardMouse()
@@ -71,8 +77,11 @@ namespace Game.Player
 
             FireHeld |= Input.GetMouseButton(0);
             AimHeld |= Input.GetMouseButton(1);
+            SprintHeld |= Input.GetKey(KeyCode.LeftShift);
             ReloadPressed |= Input.GetKeyDown(KeyCode.R);
             JumpPressed |= Input.GetKeyDown(KeyCode.Space);
+            SlidePressed |= Input.GetKeyDown(KeyCode.LeftControl)
+                         || Input.GetKeyDown(KeyCode.C);
         }
     }
 }

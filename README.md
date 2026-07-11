@@ -13,12 +13,27 @@ playable core: move, aim, shoot, reload, kill enemies, survive rounds.
 
 1. Open the project in Unity Hub (`Add` → pick this folder).
 2. Wait for the initial import — several minutes, it is compiling packages and shaders.
-3. Menu bar → **Game → Build Arena Scene**. This generates `Assets/Scenes/Arena.unity`
-   with the geometry, player rig, enemy prefab, spawner, HUD, and a baked NavMesh.
-4. Press **Play**. Click inside the Game view first so the cursor locks.
+3. **Window → TextMeshPro → Import TMP Essential Resources.** Without the font assets the
+   HUD renders nothing.
+4. **Game → Bake Weapon Audio.** Synthesises the gunfire and reload clips into
+   `Assets/Audio`. Do this *before* building a scene — the builder wires whatever clips
+   exist at the time, and warns if they are missing.
+5. **Game → Build Island Scene** (or **Build Arena Scene** for the boxed test map).
+6. Press **Play**. Click inside the Game view first so the cursor locks.
 
-The scene is generated rather than committed as a binary `.unity` blob, so the whole level
-stays reviewable as source and can be rebuilt at any time.
+Both scenes are generated rather than committed as binary `.unity` blobs, so the levels
+stay reviewable as source and can be rebuilt at any time. Steps 3 and 4 only need doing
+once; step 5 can be re-run whenever the builders change.
+
+## The two maps
+
+**Island** — a 400 m heightfield with a ragged coastline, sea on every side, 140 trees, 70
+boulders, and five roofless compounds. Every compound wall has a gap in it, so no building
+is a safe box. The terrain, the props, and the spawn placement all come from one seed, so
+the map is reproducible and nothing is downloaded.
+
+**Arena** — a walled box with cover crates. Faster to iterate on when the thing being
+tested is a weapon or an AI change rather than the level.
 
 ## Controls
 
@@ -29,6 +44,13 @@ stays reviewable as source and can be rebuilt at any time.
 | Fire | Left mouse | `FIRE` button |
 | Aim down sights | Right mouse | `AIM` button |
 | Reload | `R` | `RELOAD` button |
+| Sprint | `Shift` (hold) | `RUN` button (hold) |
+| Jump | `Space` | `JUMP` button |
+| Slide | `Ctrl` or `C` | `SLIDE` button |
+
+A slide only starts out of a grounded sprint, carries you along the direction you were
+already running, and decays — it is a commitment, not a free dodge. Jumping out of one
+cancels it and keeps the speed.
 
 ## What is in Milestone 1
 

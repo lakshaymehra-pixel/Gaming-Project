@@ -197,7 +197,7 @@ MonoBehaviour:
   turnSpeed: 8
   muzzleFlash: {fileID: 0}
   audioSource: {fileID: 3354223558390914534}
-  fireClip: {fileID: 0}
+  fireClip: {fileID: 8300000, guid: ac810e1bf3e85584db1eca530c386ad7, type: 3}
   despawnDelay: 4
 --- !u!1 &4008806944371638087
 GameObject:

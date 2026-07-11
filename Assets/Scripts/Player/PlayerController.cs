@@ -17,20 +17,30 @@ namespace Game.Player
         [Header("Weapon")]
         [SerializeField] private Weapon weapon;
         [SerializeField] private RecoilController recoil;
+        [SerializeField] private WeaponAnimator weaponAnimator;
 
-        [Header("Aim down sights")]
+        [Header("Camera")]
         [SerializeField] private Camera viewCamera;
+        [SerializeField] private Transform cameraPivot;
         [SerializeField] private float hipFov = 70f;
         [SerializeField] private float aimFov = 50f;
-        [SerializeField] private float fovSpeed = 12f;
+        [SerializeField] private float sprintFov = 78f;
+        [SerializeField] private float fovSpeed = 10f;
+
+        [Header("Slide")]
+        [SerializeField] private float cameraDropSpeed = 12f;
 
         private PlayerInputHub _input;
         private PlayerMotor _motor;
         private PlayerLook _look;
         private Health _health;
 
+        private float _pivotRestHeight;
+        private float _currentDrop;
+
         public Health Health => _health;
         public Weapon Weapon => weapon;
+        public PlayerMotor Motor => _motor;
         public bool IsAiming { get; private set; }
 
         private void Awake()
@@ -39,46 +49,78 @@ namespace Game.Player
             _motor = GetComponent<PlayerMotor>();
             _look = GetComponent<PlayerLook>();
             _health = GetComponent<Health>();
+
+            if (cameraPivot != null)
+                _pivotRestHeight = cameraPivot.localPosition.y;
         }
 
         private void OnEnable()
         {
             if (weapon != null) weapon.RecoilKick += OnRecoil;
-            _health.Died += OnDied;
         }
 
         private void OnDisable()
         {
             if (weapon != null) weapon.RecoilKick -= OnRecoil;
-            _health.Died -= OnDied;
         }
 
         private void Update()
         {
             if (_health.IsDead) return;
 
-            IsAiming = _input.AimHeld;
+            // Aiming down sights while sprinting or sliding makes no sense, and letting both
+            // run at once fights over the FOV.
+            IsAiming = _input.AimHeld && !_motor.IsSliding && !_motor.IsSprinting;
+
             _look.IsAiming = IsAiming;
+            _motor.SprintHeld = _input.SprintHeld;
 
             _look.Look(_input.Look);
+
+            if (_input.JumpPressed) _motor.TryJump();
+            if (_input.SlidePressed) _motor.TrySlide();
+
             _motor.Move(_input.Move);
 
             if (weapon != null)
             {
-                weapon.UpdateTrigger(_input.FireHeld, IsAiming);
+                // A sliding player cannot shoot straight, and neither can a sprinting one.
+                bool canFire = !_motor.IsSliding;
+                weapon.UpdateTrigger(canFire && _input.FireHeld, IsAiming);
+
                 if (_input.ReloadPressed) weapon.TryReload();
             }
 
+            if (weaponAnimator != null) weaponAnimator.IsAiming = IsAiming;
+
             UpdateFov();
+            UpdateCameraDrop();
         }
 
         private void UpdateFov()
         {
             if (viewCamera == null) return;
 
-            float target = IsAiming ? aimFov : hipFov;
+            float target = hipFov;
+            if (IsAiming) target = aimFov;
+            else if (_motor.IsSprinting || _motor.IsSliding) target = sprintFov;
+
             viewCamera.fieldOfView = Mathf.Lerp(
                 viewCamera.fieldOfView, target, fovSpeed * Time.deltaTime);
+        }
+
+        private void UpdateCameraDrop()
+        {
+            if (cameraPivot == null) return;
+
+            // The motor decides how low the slide sits; the controller just moves the eye
+            // there. Doing it here keeps the motor from reaching into the camera rig.
+            _currentDrop = Mathf.Lerp(
+                _currentDrop, _motor.CameraDrop, cameraDropSpeed * Time.deltaTime);
+
+            Vector3 p = cameraPivot.localPosition;
+            p.y = _pivotRestHeight - _currentDrop;
+            cameraPivot.localPosition = p;
         }
 
         private void OnRecoil(Vector2 kick)
@@ -86,16 +128,10 @@ namespace Game.Player
             if (recoil != null) recoil.AddRecoil(kick);
         }
 
-        private void OnDied(GameObject killer)
-        {
-            // Movement and firing are gated on IsDead in Update; the game loop owns
-            // what happens next (respawn, game over screen).
-        }
-
         public void Respawn(Vector3 position, float yaw)
         {
-            // The CharacterController overrides transform writes while enabled, so it has
-            // to be switched off for the teleport to land.
+            // The CharacterController overrides transform writes while enabled, so it has to
+            // be switched off for the teleport to land.
             var cc = GetComponent<CharacterController>();
             cc.enabled = false;
             transform.position = position;
