@@ -46,6 +46,10 @@ namespace Game.Enemies
 
         public Health Health => _health;
 
+        /// <summary>Raised on every shot. The animator listens so the fire pose can sync
+        /// to the actual trigger pull rather than guessing from state.</summary>
+        public event System.Action Fired;
+
         private void Awake()
         {
             _agent = GetComponent<NavMeshAgent>();
@@ -150,6 +154,8 @@ namespace Game.Enemies
 
             if (muzzleFlash != null) muzzleFlash.Play();
             if (audioSource != null && fireClip != null) audioSource.PlayOneShot(fireClip);
+
+            Fired?.Invoke();
         }
 
         private void OnDied(GameObject killer)
