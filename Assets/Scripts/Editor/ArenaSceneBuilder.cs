@@ -36,6 +36,8 @@ namespace Game.EditorTools
         [MenuItem("Game/Build Arena Scene")]
         public static void Build()
         {
+            if (BlockedByPlayMode()) return;
+
             EnsureLayersAndTags();
 
             Scene scene = EditorSceneManager.NewScene(
@@ -65,6 +67,24 @@ namespace Game.EditorTools
 
             Debug.Log($"<b>Arena built.</b> Saved to {ScenePath}. Press Play to test " +
                       "(WASD + mouse; click in the Game view first to lock the cursor).");
+        }
+
+        /// <summary>
+        /// Scene builders cannot run in Play mode — EditorSceneManager.NewScene throws —
+        /// and the exception it throws is easy to miss in the Console. This turns that
+        /// failure into a dialog the user cannot miss.
+        /// </summary>
+        internal static bool BlockedByPlayMode()
+        {
+            if (!Application.isPlaying) return false;
+
+            EditorUtility.DisplayDialog(
+                "Stop Play mode first",
+                "Scenes cannot be built while the game is running.\n\n" +
+                "Press the Stop (■) button at the top of the editor, then run this " +
+                "menu item again.",
+                "OK");
+            return true;
         }
 
         // ------------------------------------------------------------------ layers, tags
@@ -454,28 +474,12 @@ namespace Game.EditorTools
 
             var root = new GameObject("Enemy") { layer = EnemyLayer };
 
-            // Body: a capsule with its collider kept, so bullets have something to strike.
-            GameObject body = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            body.name = "Body";
-            body.layer = EnemyLayer;
-            body.transform.SetParent(root.transform, false);
-            body.transform.localPosition = new Vector3(0f, 1f, 0f);
-            body.transform.localScale = new Vector3(0.8f, 1f, 0.8f);
-            body.GetComponent<Renderer>().sharedMaterial = mats.Enemy;
-
-            // Head: separate collider tagged so Weapon can score a headshot multiplier.
-            GameObject head = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            head.name = "Head";
-            head.tag = "Head";
-            head.layer = EnemyLayer;
-            head.transform.SetParent(root.transform, false);
-            head.transform.localPosition = new Vector3(0f, 1.95f, 0f);
-            head.transform.localScale = Vector3.one * 0.5f;
-            head.GetComponent<Renderer>().sharedMaterial = mats.EnemyHead;
-
-            var eyes = new GameObject("Eyes").transform;
-            eyes.SetParent(root.transform, false);
-            eyes.localPosition = new Vector3(0f, 1.8f, 0.3f);
+            // The body is a primitive-built soldier: helmet, vest, rifle, legs that swing
+            // while it moves. Hit rules are unchanged from the capsule days — the torso
+            // carries the body collider, the head is tagged for the headshot multiplier,
+            // and limbs collide with nothing.
+            SoldierFactory.Rig rig = SoldierFactory.Build(root.transform, EnemyLayer);
+            Transform eyes = rig.Eyes;
 
             var agent = root.AddComponent<NavMeshAgent>();
             agent.speed = 3.6f;

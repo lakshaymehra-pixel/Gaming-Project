@@ -39,6 +39,8 @@ namespace Game.EditorTools
         [MenuItem("Game/Build Island Scene")]
         public static void Build()
         {
+            if (ArenaSceneBuilder.BlockedByPlayMode()) return;
+
             ArenaSceneBuilder.EnsureLayersAndTags();
 
             Scene scene = EditorSceneManager.NewScene(
