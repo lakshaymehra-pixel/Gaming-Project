@@ -765,8 +765,11 @@ namespace Game.EditorTools
 
         private static void BakeNavMesh()
         {
-            NavMeshBuilder.ClearAllNavMeshes();
-            NavMeshBuilder.BuildNavMesh();
+            // Qualified because UnityEngine.AI declares a NavMeshBuilder too, and the file
+            // imports both namespaces. The editor one is the baker; the runtime one builds
+            // NavMeshData at play time and cannot write the scene's baked surface.
+            UnityEditor.AI.NavMeshBuilder.ClearAllNavMeshes();
+            UnityEditor.AI.NavMeshBuilder.BuildNavMesh();
         }
 
         // -------------------------------------------------------------------------- utils
