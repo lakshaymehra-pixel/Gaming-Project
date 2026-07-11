@@ -313,6 +313,12 @@ namespace Game.EditorTools
             // Bullets must not collide with the shooter's own capsule.
             SetPrivate(weapon, "hitMask", (LayerMask)(~(1 << PlayerLayer)));
 
+            // Silently skipped if the clips have not been baked yet (Game > Bake Weapon
+            // Audio) — a missing sound should not stop the map from building.
+            TryWireClip(weapon, "fireClip",   "SFX_Fire");
+            TryWireClip(weapon, "reloadClip", "SFX_Reload");
+            TryWireClip(weapon, "emptyClip",  "SFX_Empty");
+
             root.AddComponent<PlayerInputHub>();
 
             var motor = root.AddComponent<PlayerMotor>();
@@ -449,6 +455,8 @@ namespace Game.EditorTools
             SetPrivate(ai, "audioSource", audio);
             // An enemy's shot must not be blocked by its own body, or by a squadmate's.
             SetPrivate(ai, "sightBlockers", (LayerMask)(~(1 << EnemyLayer)));
+
+            TryWireClip(ai, "fireClip", "SFX_EnemyFire");
 
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
             Object.DestroyImmediate(root);
@@ -809,6 +817,26 @@ namespace Game.EditorTools
             }
 
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>
+        /// Assigns a baked .wav to a serialized AudioClip field, or leaves it null and says
+        /// so. The clips come from Game > Bake Weapon Audio; a map built before that ran
+        /// should still be playable, just silent.
+        /// </summary>
+        private static void TryWireClip(Object target, string field, string clipName)
+        {
+            var clip = AssetDatabase.LoadAssetAtPath<AudioClip>($"Assets/Audio/{clipName}.wav");
+
+            if (clip == null)
+            {
+                Debug.LogWarning(
+                    $"Audio clip '{clipName}' not found. Run Game > Bake Weapon Audio, " +
+                    "then rebuild the scene, to give the guns a voice.");
+                return;
+            }
+
+            SetPrivate(target, field, clip);
         }
 
         private static void EnsureFolder(string path)
