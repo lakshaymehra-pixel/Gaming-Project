@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Game.Core;
 using Game.Enemies;
 using Game.Player;
@@ -69,7 +69,7 @@ namespace Game.EditorTools
 
         // ------------------------------------------------------------------ layers, tags
 
-        private static void EnsureLayersAndTags()
+        internal static void EnsureLayersAndTags()
         {
             var tagManager = new SerializedObject(
                 AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset")[0]);
@@ -101,12 +101,12 @@ namespace Game.EditorTools
 
         // ---------------------------------------------------------------------- materials
 
-        private class Mats
+        internal class Mats
         {
             public Material Floor, Wall, Crate, Player, Enemy, EnemyHead, Gun, Tracer;
         }
 
-        private static Mats CreateMaterials()
+        internal static Mats CreateMaterials()
         {
             EnsureFolder(MaterialDir);
 
@@ -123,13 +123,13 @@ namespace Game.EditorTools
             };
         }
 
-        private static Material MakeMaterial(string name, Color color)
+        internal static Material MakeMaterial(string name, Color color)
         {
             string path = $"{MaterialDir}/{name}.mat";
             var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
             if (existing != null) return existing;
 
-            // URP if present, built-in otherwise — the project template decides which is live.
+            // URP if present, built-in otherwise â€” the project template decides which is live.
             Shader shader = Shader.Find("Universal Render Pipeline/Lit")
                          ?? Shader.Find("Standard");
 
@@ -246,7 +246,7 @@ namespace Game.EditorTools
             return go.transform;
         }
 
-        private static PlayerController BuildPlayer(Transform spawn, Mats mats,
+        internal static PlayerController BuildPlayer(Transform spawn, Mats mats,
                                                     out GameObject weaponOwner)
         {
             var root = new GameObject("Player") { layer = PlayerLayer };
@@ -391,7 +391,7 @@ namespace Game.EditorTools
 
         // -------------------------------------------------------------------------- enemy
 
-        private static EnemyAI BuildEnemyPrefab(Mats mats)
+        internal static EnemyAI BuildEnemyPrefab(Mats mats)
         {
             EnsureFolder(PrefabDir);
             string path = $"{PrefabDir}/Enemy.prefab";
@@ -486,7 +486,7 @@ namespace Game.EditorTools
 
         // ---------------------------------------------------------------- spawner + loop
 
-        private static WaveSpawner BuildSpawner(EnemyAI prefab, Transform[] points,
+        internal static WaveSpawner BuildSpawner(EnemyAI prefab, Transform[] points,
                                                 Transform target)
         {
             var go = new GameObject("WaveSpawner");
@@ -504,7 +504,7 @@ namespace Game.EditorTools
             return spawner;
         }
 
-        private static GameLoop BuildGameLoop(PlayerController player, WaveSpawner spawner,
+        internal static GameLoop BuildGameLoop(PlayerController player, WaveSpawner spawner,
                                               Transform playerSpawn)
         {
             var go = new GameObject("GameLoop");
@@ -522,7 +522,7 @@ namespace Game.EditorTools
 
         // ---------------------------------------------------------------------------- HUD
 
-        private static void BuildHud(GameLoop loop, PlayerController player)
+        internal static void BuildHud(GameLoop loop, PlayerController player)
         {
             var canvasGo = new GameObject("HUD",
                 typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -763,7 +763,7 @@ namespace Game.EditorTools
 
         // ------------------------------------------------------------------------ navmesh
 
-        private static void BakeNavMesh()
+        internal static void BakeNavMesh()
         {
             // Qualified because UnityEngine.AI declares a NavMeshBuilder too, and the file
             // imports both namespaces. The editor one is the baker; the runtime one builds
@@ -820,7 +820,7 @@ namespace Game.EditorTools
             AssetDatabase.CreateFolder(parent, leaf);
         }
 
-        private static void AddSceneToBuildSettings(string path)
+        internal static void AddSceneToBuildSettings(string path)
         {
             var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
             if (scenes.Exists(s => s.path == path)) return;
