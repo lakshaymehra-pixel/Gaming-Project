@@ -285,6 +285,10 @@ namespace Game.EditorTools
             SetPrivate(health, "regenPerSecond", 18f);
             SetPrivate(health, "regenDelayAfterHit", 4f);
 
+            // Player body model (visible in TPP, hidden in FPP).
+            // Try loading the Swat model; fall back to a capsule.
+            GameObject playerBody = BuildPlayerBody(root.transform, mats);
+
             // Camera rig: pivot handles pitch, recoil holder sits under it so the kick is a
             // pure visual offset that never fights the aim.
             var pivot = new GameObject("CameraPivot").transform;
@@ -359,9 +363,58 @@ namespace Game.EditorTools
             SetPrivate(controller, "weaponAnimator", animator);
             SetPrivate(controller, "viewCamera", cam);
             SetPrivate(controller, "cameraPivot", pivot);
+            SetPrivate(controller, "playerBody", playerBody);
+            // Camera collision should ignore the player's own layer
+            SetPrivate(controller, "cameraCollisionMask",
+                (LayerMask)(~(1 << PlayerLayer)));
 
             weaponOwner = camGo;
             return controller;
+        }
+
+        /// <summary>
+        /// Builds a visible player body for TPP mode. Tries to load the Swat model;
+        /// falls back to a simple capsule so TPP always works.
+        /// </summary>
+        private static GameObject BuildPlayerBody(Transform parent, Mats mats)
+        {
+            var body = new GameObject("PlayerBody");
+            body.transform.SetParent(parent, false);
+            body.layer = PlayerLayer;
+
+            // Try loading the same model used for enemies
+            var modelAsset = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Models/Swat.fbx");
+            if (modelAsset != null)
+            {
+                var model = (GameObject)PrefabUtility.InstantiatePrefab(modelAsset, body.transform);
+                model.name = "BodyModel";
+                model.transform.localPosition = Vector3.zero;
+                model.transform.localRotation = Quaternion.identity;
+                model.transform.localScale = Vector3.one;
+
+                // Set player layer on all children
+                foreach (var t in model.GetComponentsInChildren<Transform>())
+                    t.gameObject.layer = PlayerLayer;
+
+                // Remove any colliders from the body model so it doesn't
+                // interfere with the CharacterController
+                foreach (var col in model.GetComponentsInChildren<Collider>())
+                    Object.DestroyImmediate(col);
+            }
+            else
+            {
+                // Fallback: simple capsule body
+                var capsule = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                capsule.name = "BodyCapsule";
+                capsule.transform.SetParent(body.transform, false);
+                capsule.transform.localPosition = new Vector3(0f, 0.9f, 0f);
+                capsule.transform.localScale = new Vector3(0.5f, 0.9f, 0.5f);
+                capsule.GetComponent<Renderer>().sharedMaterial = mats.Floor;
+                capsule.layer = PlayerLayer;
+                Object.DestroyImmediate(capsule.GetComponent<Collider>());
+            }
+
+            return body;
         }
 
         /// <summary>

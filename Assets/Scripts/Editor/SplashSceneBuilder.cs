@@ -33,6 +33,12 @@ namespace Game.EditorTools
         private const string TapText = "TAP TO ENTER THE NIGHT";
         private const string VersionLabel = "v0.1 — early build";
 
+        // BGMI-style warning & studio text
+        private const string AgeWarning =
+            "This game contains scenes of violence and horror.\nPlayer discretion is advised.";
+        private const string StudioName = "YAARI GAMES";
+        private const string PoweredBy = "POWERED BY UNITY";
+
         private static readonly Color Blood = new(0.55f, 0.04f, 0.03f);
         private static readonly Color BloodBright = new(0.82f, 0.10f, 0.06f);
         private static readonly Color BackgroundTop = new(0.07f, 0.015f, 0.012f);
@@ -87,6 +93,14 @@ namespace Game.EditorTools
             Transform c = canvasGo.transform;
 
             BuildBackground(c);
+
+            // ── BGMI-style intro groups (shown before the horror sequence) ──
+            CanvasGroup ageWarning = BuildBgmiGroup(c, "AgeWarning", AgeWarning, 28,
+                new Color(0.9f, 0.2f, 0.15f), DimText, "⚠", 60);
+            CanvasGroup poweredBy = BuildBgmiGroup(c, "PoweredBy", PoweredBy, 32,
+                new Color(0.6f, 0.6f, 0.6f), default, null, 0);
+            CanvasGroup studio = BuildBgmiGroup(c, "Studio", StudioName, 80,
+                new Color(0.95f, 0.55f, 0.05f), DimText, null, 0);
 
             // Content: everything that fades out at the end.
             var contentGo = new GameObject("Content", typeof(RectTransform), typeof(CanvasGroup));
@@ -153,11 +167,18 @@ namespace Game.EditorTools
             ArenaSceneBuilder.SetPrivate(controller, "bedSource", bed);
             ArenaSceneBuilder.SetPrivate(controller, "sfxSource", sfx);
             ArenaSceneBuilder.SetPrivate(controller, "nextSceneName", "Island");
+            ArenaSceneBuilder.SetPrivate(controller, "ageWarningGroup", ageWarning);
+            ArenaSceneBuilder.SetPrivate(controller, "studioGroup", studio);
+            ArenaSceneBuilder.SetPrivate(controller, "poweredByGroup", poweredBy);
             SetHoles(controller, holes);
 
-            WireClip(controller, "gunshotClip", "Assets/Audio/SFX_Fire.wav");
-            WireClip(controller, "roarClip", "Assets/Audio/AMB_Roar.wav");
-            WireClip(controller, "tickClip", "Assets/Audio/SFX_Empty.wav");
+            WireClip(controller, "gunshotClip", "Assets/Audio/SFX_GunShot.mp3",
+                     "Assets/Audio/SFX_Fire.wav");
+            WireClip(controller, "gunBurstClip", "Assets/Audio/SFX_GunBurst.mp3",
+                     "Assets/Audio/SFX_Fire.wav");
+            WireClip(controller, "explosionClip", "Assets/Audio/SFX_Explosion.mp3", null);
+            WireClip(controller, "roarClip", "Assets/Audio/AMB_Roar.wav", null);
+            WireClip(controller, "tickClip", "Assets/Audio/SFX_Empty.wav", null);
 
             ArenaSceneBuilder.SaveSceneChecked(scene, ScenePath);
             ArenaSceneBuilder.AddSceneToBuildSettings(ScenePath);
@@ -177,9 +198,13 @@ namespace Game.EditorTools
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        private static void WireClip(Object target, string field, string path)
+        private static void WireClip(Object target, string field, string path,
+            string fallback = null)
         {
             var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(path);
+            if (clip == null && fallback != null)
+                clip = AssetDatabase.LoadAssetAtPath<AudioClip>(fallback);
+
             if (clip == null)
             {
                 Debug.LogWarning($"Splash: {path} not found — bake the game audio first " +
@@ -730,6 +755,64 @@ namespace Game.EditorTools
             image.raycastTarget = false;
 
             return rt;
+        }
+
+        /// <summary>
+        /// Builds a BGMI-style intro card: centered text with optional icon above it,
+        /// wrapped in a CanvasGroup for fade in/out. Used for age warning, studio logo,
+        /// and "powered by" screens.
+        /// </summary>
+        private static CanvasGroup BuildBgmiGroup(Transform parent, string name,
+            string text, float fontSize, Color textColor, Color subColor,
+            string icon, float iconSize)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasGroup));
+            go.transform.SetParent(parent, false);
+            Stretch(go.GetComponent<RectTransform>());
+            var group = go.GetComponent<CanvasGroup>();
+            group.alpha = 0f;   // starts hidden
+
+            // Dark backdrop so it covers the gradient background cleanly
+            var bgGo = new GameObject("BgmiDark", typeof(RectTransform), typeof(Image));
+            bgGo.transform.SetParent(go.transform, false);
+            Stretch(bgGo.GetComponent<RectTransform>());
+            bgGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.95f);
+            bgGo.GetComponent<Image>().raycastTarget = false;
+
+            // Icon above text (e.g. warning symbol)
+            if (!string.IsNullOrEmpty(icon))
+            {
+                var iconText = MakeText(go.transform, name + "_Icon", icon, iconSize,
+                    textColor, new Vector2(0.5f, 0.5f), new Vector2(0f, 60f));
+                iconText.raycastTarget = false;
+            }
+
+            // Main text
+            float yPos = string.IsNullOrEmpty(icon) ? 0f : -20f;
+            var mainText = MakeText(go.transform, name + "_Text", text, fontSize,
+                textColor, new Vector2(0.5f, 0.5f), new Vector2(0f, yPos));
+            mainText.raycastTarget = false;
+
+            // Decorative line under studio name
+            if (name == "Studio")
+            {
+                var lineGo = new GameObject("Line", typeof(RectTransform), typeof(Image));
+                lineGo.transform.SetParent(go.transform, false);
+                var lineRt = lineGo.GetComponent<RectTransform>();
+                lineRt.anchorMin = lineRt.anchorMax = new Vector2(0.5f, 0.5f);
+                lineRt.anchoredPosition = new Vector2(0f, yPos - 55f);
+                lineRt.sizeDelta = new Vector2(350f, 2f);
+                lineGo.GetComponent<Image>().color = new Color(0.95f, 0.55f, 0.05f, 0.5f);
+                lineGo.GetComponent<Image>().raycastTarget = false;
+
+                // "PRESENTS" subtitle
+                var presents = MakeText(go.transform, "Presents", "P R E S E N T S", 22,
+                    new Color(0.5f, 0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                    new Vector2(0f, yPos - 80f));
+                presents.raycastTarget = false;
+            }
+
+            return group;
         }
 
         private static void Stretch(RectTransform rt)

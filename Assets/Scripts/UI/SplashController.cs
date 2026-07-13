@@ -32,6 +32,11 @@ namespace Game.UI
         [SerializeField] private Image loadingFill;
         [SerializeField] private TMP_Text tapPrompt;
 
+        [Header("BGMI-Style Intro")]
+        [SerializeField] private CanvasGroup ageWarningGroup;
+        [SerializeField] private CanvasGroup studioGroup;
+        [SerializeField] private CanvasGroup poweredByGroup;
+
         [Header("Audio")]
         [Tooltip("The scored ten seconds — accelerating heartbeat, swell under the slam. " +
                  "Plays once, in step with the sequence below.")]
@@ -44,6 +49,8 @@ namespace Game.UI
 
         [SerializeField] private AudioSource sfxSource;
         [SerializeField] private AudioClip gunshotClip;
+        [SerializeField] private AudioClip gunBurstClip;
+        [SerializeField] private AudioClip explosionClip;
         [SerializeField] private AudioClip roarClip;
         [SerializeField] private AudioClip tickClip;
 
@@ -100,6 +107,49 @@ namespace Game.UI
         {
             BeginLoad();
 
+            // Hide the main horror content initially
+            if (titleGroup != null) titleGroup.alpha = 0f;
+
+            // ═══════════════════════════════════════════════════════════
+            // BGMI PHASE 1: Age/Content Warning (like BGMI/PUBG)
+            // ═══════════════════════════════════════════════════════════
+            if (ageWarningGroup != null)
+            {
+                ageWarningGroup.alpha = 0f;
+                yield return FadeGroup(ageWarningGroup, 0f, 1f, 0.8f);
+                yield return WaitOrSkip(2.5f);
+                yield return FadeGroup(ageWarningGroup, 1f, 0f, 0.6f);
+                yield return WaitOrSkip(0.3f);
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // BGMI PHASE 2: Powered By (engine logo)
+            // ═══════════════════════════════════════════════════════════
+            if (poweredByGroup != null)
+            {
+                poweredByGroup.alpha = 0f;
+                yield return FadeGroup(poweredByGroup, 0f, 1f, 0.6f);
+                yield return WaitOrSkip(1.5f);
+                yield return FadeGroup(poweredByGroup, 1f, 0f, 0.5f);
+                yield return WaitOrSkip(0.3f);
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // BGMI PHASE 3: Studio Logo
+            // ═══════════════════════════════════════════════════════════
+            if (studioGroup != null)
+            {
+                studioGroup.alpha = 0f;
+                yield return FadeGroup(studioGroup, 0f, 1f, 0.7f);
+                yield return WaitOrSkip(2.0f);
+                yield return FadeGroup(studioGroup, 1f, 0f, 0.5f);
+                yield return WaitOrSkip(0.4f);
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // HORROR PHASE: The original KAAL RAAT sequence begins
+            // ═══════════════════════════════════════════════════════════
+
             // ---- 0.0s  Darkness. Only the drone and the heartbeat under it.
             yield return WaitOrSkip(0.7f);
 
@@ -107,9 +157,15 @@ namespace Game.UI
             PlayOneShot(roarClip, 0.3f, 0.75f);
             yield return WaitOrSkip(0.85f);
 
-            // ---- 1.55s  It answers itself, closer. The shots come out of this.
-            PlayOneShot(roarClip, 0.5f, 0.95f);
-            _shakeAmplitude = 7f;
+            // ---- 1.55s  It answers itself, closer. Louder. Angrier.
+            PlayOneShot(roarClip, 0.7f, 0.65f);
+            _shakeAmplitude = 12f;
+            yield return WaitOrSkip(0.3f);
+
+            // ---- A third roar, very close — the creature is HERE
+            PlayOneShot(roarClip, 0.9f, 0.5f);
+            _shakeAmplitude = 18f;
+            Flash(0.3f, 0.1f);
             yield return WaitOrSkip(0.45f);
 
             // ---- 2.0s  Panic fire. Not paced shots — someone emptying a magazine at a
@@ -128,17 +184,44 @@ namespace Game.UI
             // ---- 5.6s  The name burns itself out of the dark.
             if (!_skip) yield return RevealTitle();
 
+            // After title: gun burst + explosion = war zone chaos
+            if (!_skip)
+            {
+                // Quick burst of auto fire
+                PlayOneShot(gunBurstClip, 0.85f, 1.1f);
+                _shakeAmplitude = Mathf.Max(_shakeAmplitude, 20f);
+                yield return WaitOrSkip(0.3f);
+
+                // Double shot
+                PlayOneShot(gunshotClip, 1f, 0.95f);
+                Flash(0.5f, 0.08f);
+                yield return WaitOrSkip(0.15f);
+                PlayOneShot(gunshotClip, 0.9f, 1.05f);
+                Flash(0.3f, 0.06f);
+                _shakeAmplitude = Mathf.Max(_shakeAmplitude, 18f);
+
+                // Distant explosion
+                yield return WaitOrSkip(0.2f);
+                PlayOneShot(explosionClip, 0.5f, 0.75f);
+                _shakeAmplitude = Mathf.Max(_shakeAmplitude, 12f);
+            }
+
             if (!_skip)
             {
                 yield return FadeSubtitle(0.4f);
+
+                // Distant roar during subtitle — something is still out there
+                PlayOneShot(roarClip, 0.4f, 0.55f);
                 yield return WaitOrSkip(0.35f);
                 yield return RevealQuote();
             }
 
             ApplyFinalState();
 
-            // ---- 10.0s  Let the finished frame breathe before the prompt appears. The
-            // storm is running by now, so this is not dead air.
+            // After everything: one final distant roar fading away
+            PlayOneShot(roarClip, 0.25f, 0.45f);
+
+            // ---- Let the finished frame breathe before the prompt appears.
             yield return WaitOrSkip(0.8f);
 
             _sequenceDone = true;
@@ -170,6 +253,11 @@ namespace Game.UI
         /// <summary>The end of the sequence, reachable by skip: everything visible.</summary>
         private void ApplyFinalState()
         {
+            // Hide BGMI intro groups
+            if (ageWarningGroup != null) ageWarningGroup.alpha = 0f;
+            if (studioGroup != null) studioGroup.alpha = 0f;
+            if (poweredByGroup != null) poweredByGroup.alpha = 0f;
+
             foreach (var hole in bulletHoles)
                 if (hole != null) hole.gameObject.SetActive(true);
 
@@ -198,12 +286,14 @@ namespace Game.UI
         // --------------------------------------------------------------------- beats
 
         /// <summary>
-        /// The burst. Shots accelerate — 0.34s between the first two, barely 0.1s between
-        /// the last two — because a man firing at something he cannot see does not pace
-        /// himself, and an evenly-spaced volley reads as a metronome instead of panic.
+        /// The burst. Shots accelerate — panic fire in the dark. Uses real gun burst
+        /// clip layered with individual shots for each bullet hole.
         /// </summary>
         private IEnumerator Fusillade()
         {
+            // Play the full auto burst sound underneath everything
+            PlayOneShot(gunBurstClip, 0.9f, Random.Range(0.92f, 1.05f));
+
             for (int i = 0; i < bulletHoles.Length; i++)
             {
                 if (_skip) yield break;
@@ -217,6 +307,11 @@ namespace Game.UI
 
                 yield return WaitOrSkip(Mathf.Lerp(0.34f, 0.1f, p * p));
             }
+
+            // Explosion after the burst — something got hit
+            PlayOneShot(explosionClip, 0.6f, 0.85f);
+            _shakeAmplitude = Mathf.Max(_shakeAmplitude, 25f);
+            Flash(0.5f, 0.12f);
         }
 
         private void Bang(int index, float force = 1f)
@@ -237,9 +332,9 @@ namespace Game.UI
         /// </summary>
         private IEnumerator SlamEmblem()
         {
-            PlayOneShot(roarClip, 1f, 0.6f);
-            Flash(0.9f, 0.22f);
-            _shakeAmplitude = 46f;
+            PlayOneShot(roarClip, 1f, 0.5f);   // deeper pitch = bigger creature
+            Flash(1f, 0.28f);                   // brighter flash
+            _shakeAmplitude = 60f;              // harder shake
 
             const float duration = 0.34f;
             float t = 0f;
@@ -378,9 +473,9 @@ namespace Game.UI
 
             if (Time.time >= _nextFlickerAt)
             {
-                // A burst, not a single dip — real faulty lights stutter.
-                _flickerUntil = Time.time + Random.Range(0.08f, 0.3f);
-                _nextFlickerAt = Time.time + Random.Range(0.8f, 2.6f);
+                // Aggressive flicker — faulty lights in a horror setting.
+                _flickerUntil = Time.time + Random.Range(0.1f, 0.4f);
+                _nextFlickerAt = Time.time + Random.Range(0.5f, 1.8f);
             }
 
             titleGroup.alpha = Time.time < _flickerUntil
@@ -404,7 +499,7 @@ namespace Game.UI
             if (_nextLightningAt <= 0f || Time.time < _nextLightningAt) return;
 
             StartCoroutine(LightningBlink());
-            _nextLightningAt = Time.time + Random.Range(1.6f, 3.4f);
+            _nextLightningAt = Time.time + Random.Range(1.0f, 2.5f);
         }
 
         /// <summary>
@@ -413,10 +508,16 @@ namespace Game.UI
         /// </summary>
         private IEnumerator LightningBlink()
         {
-            bool close = Random.value < 0.35f;
+            bool close = Random.value < 0.45f;   // more close strikes
 
-            Flash(close ? 0.55f : 0.24f, 0.05f);
-            if (close) _shakeAmplitude = Mathf.Max(_shakeAmplitude, 9f);
+            Flash(close ? 0.7f : 0.3f, 0.06f);
+            if (close)
+            {
+                _shakeAmplitude = Mathf.Max(_shakeAmplitude, 14f);
+                // Sometimes a close strike brings a distant roar
+                if (Random.value < 0.3f)
+                    PlayOneShot(roarClip, 0.15f, Random.Range(0.4f, 0.6f));
+            }
 
             yield return new WaitForSeconds(Random.Range(0.07f, 0.13f));
             Flash(close ? 0.3f : 0.15f, 0.06f);
@@ -431,7 +532,7 @@ namespace Game.UI
 
         private IEnumerator FlashRoutine(float alpha, float seconds)
         {
-            var hot = new Color(0.9f, 0.15f, 0.1f);
+            var hot = new Color(0.85f, 0.08f, 0.05f);   // deeper blood red flash
 
             float t = 0f;
             while (t < seconds)
@@ -461,6 +562,20 @@ namespace Game.UI
                 t += Time.deltaTime;
                 yield return null;
             }
+        }
+
+        private IEnumerator FadeGroup(CanvasGroup group, float from, float to, float seconds)
+        {
+            if (group == null) yield break;
+            float t = 0f;
+            group.alpha = from;
+            while (t < seconds && !_skip)
+            {
+                t += Time.deltaTime;
+                group.alpha = Mathf.Lerp(from, to, t / seconds);
+                yield return null;
+            }
+            group.alpha = to;
         }
 
         private void BeginLoad()

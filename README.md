@@ -5,9 +5,19 @@ jungle-island shooter: move, aim, shoot, slide, survive rounds against animated 
 enemies on a generated island, under a generated soundscape.
 
 Everything in this repo is source. The maps are **generated from code** (menu:
-`Game → Build Island Scene`), every sound is **synthesised from code** — including the
-intro's ten-second score — and the only binary asset is one CC0 character model (8 MB).
+`Game → Build Island Scene`), the intro's ten-second score is synthesised, and the only
+binary asset is one CC0 character model (8 MB). Real audio files (gunshots, jungle
+ambience, sea waves, explosions) are included for a polished sound mix.
 A fresh clone plus a few menu clicks produces the whole game.
+
+### Key Features
+- **BGMI-style TPP/FPP** — third-person by default, switches to first-person on AIM
+- **Horror-themed splash screen** — BGMI-style age warning → studio logo → cinematic
+  intro with panic gunfire, creature roars, claw emblem slam, and lightning storm
+- **Real audio** — downloaded gunshot bursts, jungle nature recordings, sea waves,
+  explosions layered over synthesised ambience
+- **Wave-based survival** — escalating enemy waves on a procedural jungle island
+- **Full mobile touch controls** — joystick, fire, aim, reload, sprint, slide, jump
 
 ---
 
@@ -73,11 +83,14 @@ git config --global user.email "social.marketing@salarytopup.com"
 | Move | `WASD` | Left joystick |
 | Look / aim | Mouse | Drag the right half of the screen |
 | Fire | Left mouse | `FIRE` button |
-| Aim down sights | Right mouse | `AIM` button |
+| Aim (TPP→FPP) | Right mouse (hold) | `AIM` button (hold) |
 | Reload | `R` | `RELOAD` button |
 | Sprint | `Shift` (hold) | `RUN` button (hold) |
 | Jump | `Space` | `JUMP` button |
 | Slide | `Ctrl` or `C` | `SLIDE` button |
+
+**Camera:** The game starts in **TPP** (third-person). Hold **AIM** to switch to **FPP**
+(first-person) — release to go back. This mirrors the BGMI/PUBG camera system.
 
 A slide only starts out of a grounded sprint, carries you along the direction you were
 already running, and decays — it is a commitment, not a free dodge. Jumping out of one
@@ -87,24 +100,28 @@ cancels it and keeps the speed. Firing is blocked while sliding.
 
 ## What is in the game right now
 
-**Intro** — a ten-second action-horror sequence that boots first and loads the island
-behind itself. It escalates rather than repeating: a distant roar in the dark, then a
-panicked fusillade whose gaps close as it goes (0.34s between the first two shots, 0.1s
-between the last — a man firing at something he can't see doesn't pace himself), then a
-full second of silence, and the claw emblem slams into that silence from 4.2× scale with
-the roar pitched down to 0.6. The title spells itself out under a storm that is already
-running. Every visual is drawn in code — the claw, the splatter, the bullet holes are all
-generated textures — and the audio is two synthesised clips: a scored ten seconds whose
-heartbeat accelerates from 1.7s apart to under a second and whose sub-bass swell peaks
-under the slam, plus a seamless bed loop underneath so a slow scene load never drops the
-screen into silence. Tap to skip.
+**Intro** — a BGMI-style splash sequence with horror elements:
 
-The whole look lives in the constant block at the top of `SplashSceneBuilder`; the timing
-lives in `SplashController.Run()`.
+1. **Age/content warning** (BGMI style) — fades in/out
+2. **"Powered by Unity"** screen
+3. **"YAARI GAMES PRESENTS"** studio logo with gold accent
+4. **Horror sequence** — escalating creature roars (three, each closer and deeper),
+   panic gunfire burst with real gun sounds and explosion, silence, then the claw emblem
+   slams in from 4.2x scale with a pitched-down roar and 60-unit screen shake
+5. **Title typewriter** — "KAAL RAAT" types itself out letter by letter with gunshot
+   bursts after, under an aggressive lightning storm with random close-strike roars
+6. **Quote reveal** — Hindi horror quote typewriter
+7. **Loading bar** with "TAP TO ENTER THE NIGHT" pulse
 
-**Player** — first-person movement with acceleration, gravity, jump, sprint, and a
-capsule-shrinking slide; smoothed split yaw/pitch look; FOV that widens on sprint and
-tightens on ADS.
+Real audio: gun burst, single gunshot, explosion, and creature roar clips play alongside
+a synthesised heartbeat-drone whose pulse accelerates from 1.7s to under 1s. Tap to skip.
+
+**Player** — BGMI-style **TPP/FPP** camera system. Default view is **third-person**
+(camera behind and above the player, body model visible). Pressing **AIM** smoothly
+transitions to **first-person** (camera at eye level, gun viewmodel visible). Releasing
+AIM returns to TPP. Camera collision prevents clipping through walls. Movement includes
+acceleration, gravity, jump, sprint, and a capsule-shrinking slide; smoothed split
+yaw/pitch look; FOV that widens on sprint and tightens on ADS.
 
 **Weapon** — hitscan full-auto rifle: bloom that grows while the trigger is held, spring
 recoil, magazine + reserve + timed reload, headshot multiplier, pooled tracers, muzzle
@@ -126,10 +143,15 @@ a phone can hold frame rate; the next wave gates on the island being cleared.
 with real spread, hitmarkers, a north-up radar minimap (second orthographic camera +
 UI blips that pin to the rim when enemies are out of range), and a game-over screen.
 
-**Sound** — everything synthesised: rifle report (noise burst over a pitch-dropping
-thump), reload as four timed mechanical clicks, and a jungle bed of cicadas, birdsong,
-wind, positioned river noise, and a distant roar that fires at random intervals from a
-random bearing. Four loops of different lengths so they never realign.
+**Sound** — a mix of real downloaded audio and synthesised fallbacks:
+- **Weapons**: real gunshot, gun burst, reload, and explosion clips (`.mp3`)
+- **Ambience**: real jungle nature, birds, insects, wind, and sea wave recordings,
+  plus a synthesised distant roar that fires at random intervals from a random bearing
+- **Splash**: scored drone with accelerating heartbeat, real gunfire bursts, creature
+  roars, and explosion impacts
+- Synthesised `.wav` fallbacks are generated by `GunAudioBaker` and `AmbienceBaker`
+  and used when real clips are missing. Four ambient loops of different lengths so they
+  never realign.
 
 ---
 
@@ -179,7 +201,8 @@ on when testing a weapon or AI change rather than the level.
 ```
 Assets/
   Scenes/      Splash.unity, Island.unity — generated output, committed
-  Audio/       synthesised .wav clips (committed; regenerable from the Game menu)
+  Audio/       real + synthesised clips (committed; synth regenerable from the Game menu)
+               Splash/   splash-screen-only audio (jungle, guns, heartbeat, etc.)
   Models/      Swat.fbx — Quaternius, CC0 (see Models/README.md)
   Materials/   generated flat-colour materials
   Settings/    WeaponData, terrain data, minimap RT, animator controller,
@@ -241,9 +264,9 @@ Xcode. The project is kept iOS-ready so that step is mechanical when a Mac is av
 
 ## Roadmap (not built yet)
 
-Main menu, pause, settings; weapon switching and pickups; player hands/body model;
-grenades; better enemy variety; save/highscores; multiplayer; store-ready polish
-(icons, signing).
+Main menu, pause, settings; weapon switching and pickups; ~~player hands/body model~~
+(done — TPP body visible); grenades; better enemy variety; realistic character models
+(Blender/Mixamo); save/highscores; multiplayer; store-ready polish (icons, signing).
 
 ---
 

@@ -27,6 +27,14 @@ namespace Game.Player
         [SerializeField] private float sprintFov = 78f;
         [SerializeField] private float fovSpeed = 10f;
 
+        [Header("TPP / FPP (BGMI style)")]
+        [SerializeField] private Vector3 tppOffset = new(0.5f, 0.3f, -2.5f);
+        [SerializeField] private float tppFov = 60f;
+        [SerializeField] private float viewSwitchSpeed = 12f;
+        [SerializeField] private float cameraCollisionRadius = 0.2f;
+        [SerializeField] private LayerMask cameraCollisionMask = ~0;
+        [SerializeField] private GameObject playerBody;
+
         [Header("Slide")]
         [SerializeField] private float cameraDropSpeed = 12f;
 
@@ -37,11 +45,14 @@ namespace Game.Player
 
         private float _pivotRestHeight;
         private float _currentDrop;
+        private Vector3 _currentCamLocal;   // smoothed camera local position
+        private bool _isTPP = true;         // start in TPP like BGMI
 
         public Health Health => _health;
         public Weapon Weapon => weapon;
         public PlayerMotor Motor => _motor;
         public bool IsAiming { get; private set; }
+        public bool IsTPP => _isTPP;
 
         private void Awake()
         {
@@ -52,6 +63,11 @@ namespace Game.Player
 
             if (cameraPivot != null)
                 _pivotRestHeight = cameraPivot.localPosition.y;
+
+            // Start in TPP
+            _isTPP = true;
+            if (viewCamera != null)
+                _currentCamLocal = tppOffset;
         }
 
         private void OnEnable()
@@ -93,7 +109,11 @@ namespace Game.Player
 
             if (weaponAnimator != null) weaponAnimator.IsAiming = IsAiming;
 
+            // BGMI style: AIM switches to FPP, release goes back to TPP
+            _isTPP = !IsAiming;
+
             UpdateFov();
+            UpdateCameraMode();
             UpdateCameraDrop();
         }
 
@@ -101,12 +121,60 @@ namespace Game.Player
         {
             if (viewCamera == null) return;
 
-            float target = hipFov;
-            if (IsAiming) target = aimFov;
+            float target;
+            if (IsAiming) target = aimFov;               // FPP aim
             else if (_motor.IsSprinting || _motor.IsSliding) target = sprintFov;
+            else target = _isTPP ? tppFov : hipFov;      // TPP uses wider FOV
 
             viewCamera.fieldOfView = Mathf.Lerp(
                 viewCamera.fieldOfView, target, fovSpeed * Time.deltaTime);
+        }
+
+        private void UpdateCameraMode()
+        {
+            if (viewCamera == null) return;
+
+            // Target position: FPP = origin (at pivot), TPP = offset behind player
+            Vector3 targetLocal = _isTPP ? tppOffset : Vector3.zero;
+
+            // Smooth transition between TPP and FPP
+            _currentCamLocal = Vector3.Lerp(
+                _currentCamLocal, targetLocal, viewSwitchSpeed * Time.deltaTime);
+
+            // Camera collision: don't go through walls
+            if (_isTPP && cameraPivot != null)
+            {
+                Vector3 worldTarget = cameraPivot.TransformPoint(_currentCamLocal);
+                Vector3 pivotWorld = cameraPivot.position;
+                Vector3 dir = worldTarget - pivotWorld;
+                float dist = dir.magnitude;
+
+                if (dist > 0.01f &&
+                    Physics.SphereCast(pivotWorld, cameraCollisionRadius,
+                        dir.normalized, out RaycastHit hit, dist, cameraCollisionMask))
+                {
+                    // Pull camera forward so it doesn't clip through wall
+                    float safeDist = Mathf.Max(0.1f, hit.distance - cameraCollisionRadius);
+                    Vector3 safeWorld = pivotWorld + dir.normalized * safeDist;
+                    viewCamera.transform.position = safeWorld;
+                }
+                else
+                {
+                    viewCamera.transform.localPosition = _currentCamLocal;
+                }
+            }
+            else
+            {
+                viewCamera.transform.localPosition = _currentCamLocal;
+            }
+
+            // Show/hide player body: visible in TPP, hidden in FPP
+            if (playerBody != null)
+                playerBody.SetActive(_isTPP);
+
+            // Show/hide gun viewmodel: visible in FPP, hidden in TPP
+            if (weaponAnimator != null)
+                weaponAnimator.gameObject.SetActive(!_isTPP);
         }
 
         private void UpdateCameraDrop()
