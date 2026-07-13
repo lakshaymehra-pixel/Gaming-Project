@@ -33,7 +33,15 @@ namespace Game.UI
         [SerializeField] private TMP_Text tapPrompt;
 
         [Header("Audio")]
+        [Tooltip("The scored ten seconds — accelerating heartbeat, swell under the slam. " +
+                 "Plays once, in step with the sequence below.")]
         [SerializeField] private AudioSource droneSource;
+
+        [Tooltip("A plain loop that never stops. The scored clip runs out after ten seconds " +
+                 "but the hold for the scene load has no fixed length, and a splash sitting " +
+                 "in total silence reads as a crash.")]
+        [SerializeField] private AudioSource bedSource;
+
         [SerializeField] private AudioSource sfxSource;
         [SerializeField] private AudioClip gunshotClip;
         [SerializeField] private AudioClip roarClip;
@@ -92,40 +100,47 @@ namespace Game.UI
         {
             BeginLoad();
 
-            // Darkness and the drone. Let the unease settle before anything happens.
-            yield return WaitOrSkip(0.9f);
+            // ---- 0.0s  Darkness. Only the drone and the heartbeat under it.
+            yield return WaitOrSkip(0.7f);
 
-            // Something out there.
-            PlayOneShot(roarClip, 0.35f, 0.9f);
-            yield return WaitOrSkip(0.9f);
+            // ---- 0.7s  Something out there, still far off. Low and slow.
+            PlayOneShot(roarClip, 0.3f, 0.75f);
+            yield return WaitOrSkip(0.85f);
 
-            // Three shots out of the dark. Impacts, not decoration: each one lands with
-            // a flash and a rattle.
-            for (int i = 0; i < bulletHoles.Length; i++)
-            {
-                if (_skip) break;
-                Bang(i);
-                yield return WaitOrSkip(0.42f);
-            }
+            // ---- 1.55s  It answers itself, closer. The shots come out of this.
+            PlayOneShot(roarClip, 0.5f, 0.95f);
+            _shakeAmplitude = 7f;
+            yield return WaitOrSkip(0.45f);
 
-            yield return WaitOrSkip(0.35f);
+            // ---- 2.0s  Panic fire. Not paced shots — someone emptying a magazine at a
+            // shape in the dark: the gaps close, the last pair almost overlap.
+            yield return Fusillade();
 
-            // The claws answer the gunfire.
+            // ---- 3.6s  Then nothing. The silence after the firing is the scare; the
+            // slam has to land in it, not on top of more noise.
+            yield return WaitOrSkip(1.1f);
+
+            // ---- 4.7s  The claws answer.
             if (!_skip) yield return SlamEmblem();
 
-            yield return WaitOrSkip(0.4f);
+            yield return WaitOrSkip(0.55f);
 
-            // The name types itself out of the dark.
+            // ---- 5.6s  The name burns itself out of the dark.
             if (!_skip) yield return RevealTitle();
 
             if (!_skip)
             {
-                yield return FadeSubtitle(0.35f);
-                yield return WaitOrSkip(0.3f);
+                yield return FadeSubtitle(0.4f);
+                yield return WaitOrSkip(0.35f);
                 yield return RevealQuote();
             }
 
             ApplyFinalState();
+
+            // ---- 10.0s  Let the finished frame breathe before the prompt appears. The
+            // storm is running by now, so this is not dead air.
+            yield return WaitOrSkip(0.8f);
+
             _sequenceDone = true;
 
             // Hold for the island. The bar shows real progress; Unity parks async loads
@@ -169,28 +184,64 @@ namespace Game.UI
             if (subtitle != null) subtitle.alpha = 1f;
             if (quote != null) quote.maxVisibleCharacters = int.MaxValue;
 
-            _nextLightningAt = Time.time + 2f;
+            // Both, not just the lightning: skipping past the slam skips the only other place
+            // the flicker clock is armed, and a storm with no flicker is half a storm.
+            _nextLightningAt = Time.time + 1f;
+            _nextFlickerAt = Time.time + 1.5f;
+
+            // A skip jumps to the end of the picture, so the audio scored to the picture has
+            // to end with it — otherwise a tap at second two leaves the slam's swell rising
+            // under a screen where the slam has already happened. The bed keeps playing.
+            if (_skip && droneSource != null) droneSource.Stop();
         }
 
         // --------------------------------------------------------------------- beats
 
-        private void Bang(int index)
+        /// <summary>
+        /// The burst. Shots accelerate — 0.34s between the first two, barely 0.1s between
+        /// the last two — because a man firing at something he cannot see does not pace
+        /// himself, and an evenly-spaced volley reads as a metronome instead of panic.
+        /// </summary>
+        private IEnumerator Fusillade()
+        {
+            for (int i = 0; i < bulletHoles.Length; i++)
+            {
+                if (_skip) yield break;
+
+                float p = bulletHoles.Length > 1
+                    ? i / (float)(bulletHoles.Length - 1)
+                    : 0f;
+
+                // Later shots hit harder: the shooter is closer to losing it.
+                Bang(i, 1f + p * 0.5f);
+
+                yield return WaitOrSkip(Mathf.Lerp(0.34f, 0.1f, p * p));
+            }
+        }
+
+        private void Bang(int index, float force = 1f)
         {
             RectTransform hole = bulletHoles[index];
             if (hole != null) hole.gameObject.SetActive(true);
 
-            PlayOneShot(gunshotClip, 0.7f, Random.Range(0.92f, 1.05f));
-            Flash(0.5f, 0.09f);
-            _shakeAmplitude = Mathf.Max(_shakeAmplitude, 16f);
+            PlayOneShot(gunshotClip, 0.85f * force, Random.Range(0.9f, 1.08f));
+            Flash(0.62f * force, 0.075f);
+            _shakeAmplitude = Mathf.Max(_shakeAmplitude, 22f * force);
         }
 
+        /// <summary>
+        /// The hit the whole intro is built around. It arrives from far in front of the
+        /// screen and stops dead — the overshoot and the hard stop are what sell mass. The
+        /// roar is pitched down under its own natural range so it reads as something much
+        /// bigger than the thing that made the sound.
+        /// </summary>
         private IEnumerator SlamEmblem()
         {
-            PlayOneShot(roarClip, 0.8f, 0.8f);
-            Flash(0.65f, 0.14f);
-            _shakeAmplitude = 26f;
+            PlayOneShot(roarClip, 1f, 0.6f);
+            Flash(0.9f, 0.22f);
+            _shakeAmplitude = 46f;
 
-            const float duration = 0.3f;
+            const float duration = 0.34f;
             float t = 0f;
             while (t < duration && !_skip)
             {
@@ -198,17 +249,26 @@ namespace Game.UI
                 float p = Mathf.Clamp01(t / duration);
 
                 // Ease-out-back: overshoots past 1 and settles — an impact, not an arrival.
-                const float k = 1.9f;
+                const float k = 2.6f;
                 float eased = 1f + (k + 1f) * Mathf.Pow(p - 1f, 3f) + k * Mathf.Pow(p - 1f, 2f);
 
                 if (emblem != null)
-                    emblem.localScale = Vector3.one * Mathf.LerpUnclamped(2.6f, 1f, eased);
+                    emblem.localScale = Vector3.one * Mathf.LerpUnclamped(4.2f, 1f, eased);
                 yield return null;
             }
 
             if (emblem != null) emblem.localScale = Vector3.one;
             _slammed = true;
             _creepStartedAt = Time.time;
+
+            // The aftershock: a second, smaller kick a beat late, the way a real impact
+            // rings rather than simply stopping.
+            _shakeAmplitude = Mathf.Max(_shakeAmplitude, 14f);
+
+            // The storm starts here, not after the title — it should already be raging
+            // while the name is still being spelled out.
+            _nextLightningAt = Time.time + 0.9f;
+            _nextFlickerAt = Time.time + 1.4f;
         }
 
         private IEnumerator RevealTitle()
@@ -224,15 +284,18 @@ namespace Game.UI
 
                 if (!char.IsWhiteSpace(text[i - 1]))
                 {
-                    PlayOneShot(tickClip, 0.5f, Random.Range(0.85f, 1.2f));
-                    _shakeAmplitude = Mathf.Max(_shakeAmplitude, 4f);
+                    PlayOneShot(tickClip, 0.65f, Random.Range(0.8f, 1.25f));
+                    _shakeAmplitude = Mathf.Max(_shakeAmplitude, 7f);
+                    Flash(0.08f, 0.05f);
                 }
 
-                yield return WaitOrSkip(0.085f);
+                yield return WaitOrSkip(0.11f);
             }
 
-            _nextFlickerAt = Time.time + 1.5f;
-            _nextLightningAt = Time.time + 3f;
+            // The name lands: one last hit under the final letter.
+            PlayOneShot(roarClip, 0.45f, 0.7f);
+            _shakeAmplitude = Mathf.Max(_shakeAmplitude, 18f);
+            Flash(0.35f, 0.16f);
         }
 
         private IEnumerator FadeSubtitle(float seconds)
@@ -265,7 +328,9 @@ namespace Game.UI
         private IEnumerator FadeOutAndEnter()
         {
             const float seconds = 0.6f;
-            float startVolume = droneSource != null ? droneSource.volume : 0f;
+
+            float droneVolume = droneSource != null ? droneSource.volume : 0f;
+            float bedVolume = bedSource != null ? bedSource.volume : 0f;
 
             float t = 0f;
             while (t < seconds)
@@ -274,7 +339,13 @@ namespace Game.UI
                 float p = t / seconds;
 
                 if (content != null) content.alpha = 1f - p;
-                if (droneSource != null) droneSource.volume = startVolume * (1f - p);
+
+                // Both, or the bed keeps humming under the loading screen after the picture
+                // is gone. The scored drone has usually finished by now, which is exactly why
+                // fading it alone was never enough.
+                if (droneSource != null) droneSource.volume = droneVolume * (1f - p);
+                if (bedSource != null) bedSource.volume = bedVolume * (1f - p);
+
                 yield return null;
             }
 
@@ -290,7 +361,10 @@ namespace Game.UI
             if (_shakeAmplitude > 0.1f)
             {
                 shakeRoot.anchoredPosition = Random.insideUnitCircle * _shakeAmplitude;
-                _shakeAmplitude = Mathf.Lerp(_shakeAmplitude, 0f, 9f * Time.deltaTime);
+
+                // Slower decay than a snap-back: a heavy hit rings out over most of a
+                // second. Faster and the slam feels like a UI tween.
+                _shakeAmplitude = Mathf.Lerp(_shakeAmplitude, 0f, 6.5f * Time.deltaTime);
             }
             else
             {
@@ -305,12 +379,12 @@ namespace Game.UI
             if (Time.time >= _nextFlickerAt)
             {
                 // A burst, not a single dip — real faulty lights stutter.
-                _flickerUntil = Time.time + Random.Range(0.06f, 0.22f);
-                _nextFlickerAt = Time.time + Random.Range(1.2f, 4.5f);
+                _flickerUntil = Time.time + Random.Range(0.08f, 0.3f);
+                _nextFlickerAt = Time.time + Random.Range(0.8f, 2.6f);
             }
 
             titleGroup.alpha = Time.time < _flickerUntil
-                ? Random.Range(0.2f, 0.65f)
+                ? Random.Range(0.08f, 0.55f)
                 : 1f;
         }
 
@@ -318,25 +392,34 @@ namespace Game.UI
         {
             if (emblem == null || !_slammed) return;
 
-            // Toward the viewer, too slowly to notice consciously.
-            float t = Mathf.Clamp01((Time.time - _creepStartedAt) / 16f);
-            emblem.localScale = Vector3.one * Mathf.Lerp(1f, 1.07f, t);
+            // Toward the viewer, too slowly to notice consciously — but over the ~5s the
+            // emblem is actually on screen, not the 16s the old ramp assumed, or it never
+            // travelled far enough to register at all.
+            float t = Mathf.Clamp01((Time.time - _creepStartedAt) / 6f);
+            emblem.localScale = Vector3.one * Mathf.Lerp(1f, 1.1f, t);
         }
 
         private void UpdateLightning()
         {
             if (_nextLightningAt <= 0f || Time.time < _nextLightningAt) return;
 
-            // Double blink, like the sky snapping a photograph.
             StartCoroutine(LightningBlink());
-            _nextLightningAt = Time.time + Random.Range(3.5f, 7f);
+            _nextLightningAt = Time.time + Random.Range(1.6f, 3.4f);
         }
 
+        /// <summary>
+        /// Double blink, like the sky snapping a photograph. Roughly one strike in three
+        /// lands close: brighter, and it shakes — otherwise the storm stays wallpaper.
+        /// </summary>
         private IEnumerator LightningBlink()
         {
-            Flash(0.22f, 0.05f);
-            yield return new WaitForSeconds(0.1f);
-            Flash(0.14f, 0.05f);
+            bool close = Random.value < 0.35f;
+
+            Flash(close ? 0.55f : 0.24f, 0.05f);
+            if (close) _shakeAmplitude = Mathf.Max(_shakeAmplitude, 9f);
+
+            yield return new WaitForSeconds(Random.Range(0.07f, 0.13f));
+            Flash(close ? 0.3f : 0.15f, 0.06f);
         }
 
         // ------------------------------------------------------------------- helpers

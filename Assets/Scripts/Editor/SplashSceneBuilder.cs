@@ -45,7 +45,12 @@ namespace Game.EditorTools
 
         private const string ScenePath = "Assets/Scenes/Splash.unity";
         private const string DronePath = "Assets/Audio/AMB_SplashDrone.wav";
+        private const string BedPath = "Assets/Audio/AMB_SplashBed.wav";
         private const int DroneSampleRate = 22050;
+
+        /// <summary>Length of the scored clip. Must track the timeline in SplashController —
+        /// the swell inside it is aimed at the emblem slam, which lands at ~4.7s.</summary>
+        private const float DroneSeconds = 10f;
 
         [MenuItem("Game/Build Splash Scene")]
         public static void Build()
@@ -62,6 +67,7 @@ namespace Game.EditorTools
             camGo.AddComponent<AudioListener>();
 
             AudioSource drone = BuildDroneSource();
+            AudioSource bed = BuildBedSource();
 
             var sfxGo = new GameObject("SplashSfx");
             var sfx = sfxGo.AddComponent<AudioSource>();
@@ -144,6 +150,7 @@ namespace Game.EditorTools
             ArenaSceneBuilder.SetPrivate(controller, "loadingFill", loadingFill);
             ArenaSceneBuilder.SetPrivate(controller, "tapPrompt", tap);
             ArenaSceneBuilder.SetPrivate(controller, "droneSource", drone);
+            ArenaSceneBuilder.SetPrivate(controller, "bedSource", bed);
             ArenaSceneBuilder.SetPrivate(controller, "sfxSource", sfx);
             ArenaSceneBuilder.SetPrivate(controller, "nextSceneName", "Island");
             SetHoles(controller, holes);
@@ -264,8 +271,10 @@ namespace Game.EditorTools
         // -------------------------------------------------------------- bullet holes
 
         /// <summary>
-        /// Three impacts scattered across the upper screen, each rotated differently so
-        /// one sprite reads as three separate hits.
+        /// Five impacts, each rotated and sized differently so one sprite reads as five
+        /// separate hits. They walk across the screen in firing order rather than landing
+        /// at random — the burst should look like someone tracking a moving shape, and the
+        /// last two are tight together where the panic peaks.
         /// </summary>
         private static RectTransform[] BuildBulletHoles(Transform parent)
         {
@@ -274,8 +283,10 @@ namespace Game.EditorTools
             var placements = new (Vector2 pos, float size, float rot)[]
             {
                 (new Vector2(-640f, 300f), 130f, 20f),
-                (new Vector2(560f, 210f), 150f, 160f),
                 (new Vector2(-210f, 380f), 110f, 275f),
+                (new Vector2(300f, 250f), 145f, 95f),
+                (new Vector2(560f, 210f), 150f, 160f),
+                (new Vector2(640f, 320f), 120f, 40f),
             };
 
             var holes = new RectTransform[placements.Length];
@@ -473,20 +484,29 @@ namespace Game.EditorTools
         // --------------------------------------------------------------------- audio
 
         /// <summary>
-        /// The dread underneath: two low sines a fraction of a hertz apart (the beating
-        /// between them is the unease), a filtered rumble, a faint dissonant whine that
-        /// swells and retreats, and a double-thump heartbeat. Synthesised on first build.
+        /// The dread underneath, ten seconds of it: two low sines a fraction of a hertz
+        /// apart (the beating between them is the unease), a rumble and a whine that both
+        /// climb as the intro does, a sub-bass swell peaking under the emblem slam, and a
+        /// heartbeat that accelerates from 1.7s apart to under a second. Synthesised here.
+        ///
+        /// Rebaked on every build rather than cached: the shape of this clip is tied to the
+        /// timeline in SplashController, so a stale one from an older timing would drift
+        /// out of sync with the visuals it is scored to.
         /// </summary>
         private static AudioSource BuildDroneSource()
         {
-            if (!File.Exists(DronePath)) BakeDrone();
+            BakeDrone();
 
             var go = new GameObject("Drone");
             var source = go.AddComponent<AudioSource>();
-            source.loop = true;
+
+            // Not looped: the heartbeat inside it accelerates, so a loop would snap the
+            // pulse back to calm exactly when the intro is at its most frantic. The clip is
+            // cut to the length of the sequence and simply plays once under it.
+            source.loop = false;
             source.playOnAwake = true;
             source.spatialBlend = 0f;
-            source.volume = 0.55f;
+            source.volume = 0.6f;
 
             var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(DronePath);
             if (clip != null) source.clip = clip;
@@ -495,10 +515,69 @@ namespace Game.EditorTools
             return source;
         }
 
+        /// <summary>
+        /// The bed: the same two detuned sines and rumble, seamlessly loopable, and nothing
+        /// else. No heartbeat and no swell — those are scored to the picture and live in the
+        /// drone clip. This is only here so that a slow scene load never drops the splash
+        /// into silence.
+        /// </summary>
+        private static AudioSource BuildBedSource()
+        {
+            BakeBed();
+
+            var go = new GameObject("Bed");
+            var source = go.AddComponent<AudioSource>();
+            source.loop = true;
+            source.playOnAwake = true;
+            source.spatialBlend = 0f;
+            source.volume = 0.32f;
+
+            var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(BedPath);
+            if (clip != null) source.clip = clip;
+            else Debug.LogWarning("Splash: bed clip failed to load after bake.");
+
+            return source;
+        }
+
+        private static void BakeBed()
+        {
+            const float seconds = 4f;
+            int n = (int)(DroneSampleRate * seconds);
+            var buf = new float[n];
+            var rng = new System.Random(29);
+
+            float lp = 0f;
+
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)DroneSampleRate;
+
+                float drone = (Mathf.Sin(2f * Mathf.PI * 41f * t)
+                             + Mathf.Sin(2f * Mathf.PI * 41.35f * t)) * 0.22f;
+
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                lp += (noise - lp) * 0.015f;
+
+                buf[i] = drone + lp * 0.45f;
+            }
+
+            // Crossfade the head over the tail so the loop seam is inaudible. This one does
+            // loop forever, so the seam is the only thing that matters about it.
+            int fade = (int)(DroneSampleRate * 0.5f);
+            for (int i = 0; i < fade; i++)
+            {
+                float t = i / (float)fade;
+                buf[i] = Mathf.Lerp(buf[n - fade + i], buf[i], t);
+            }
+
+            Normalise(buf, 0.6f);
+            WriteWav(BedPath, buf);
+            AssetDatabase.Refresh();
+        }
+
         private static void BakeDrone()
         {
-            const float seconds = 9.6f;   // fits six heartbeats exactly, so the loop seam
-            const float beatEvery = 1.6f; // lands between beats, not inside one
+            const float seconds = DroneSeconds;
             int n = (int)(DroneSampleRate * seconds);
             var buf = new float[n];
             var rng = new System.Random(13);
@@ -508,6 +587,7 @@ namespace Game.EditorTools
             for (int i = 0; i < n; i++)
             {
                 float t = i / (float)DroneSampleRate;
+                float through = t / seconds;                   // 0..1 across the sequence
 
                 // The beating pair. 41 vs 41.35 Hz — a 0.35 Hz pulse you feel, not hear.
                 float drone = (Mathf.Sin(2f * Mathf.PI * 41f * t)
@@ -515,35 +595,53 @@ namespace Game.EditorTools
 
                 float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
                 lp += (noise - lp) * 0.015f;
-                float rumble = lp * 0.5f;
 
-                float swell = Mathf.Pow(0.5f + 0.5f * Mathf.Sin(2f * Mathf.PI * 0.07f * t - 1.2f), 3f);
-                float whine = Mathf.Sin(2f * Mathf.PI * 587f * t) * swell * 0.035f;
+                // The rumble climbs as the intro does, so the floor under the whole thing
+                // is rising even in the silence before the slam.
+                float rumble = lp * (0.4f + through * 0.55f);
 
-                buf[i] = drone + rumble + whine;
+                // A sub-bass swell timed to peak under the emblem hit at ~4.7s — the drop
+                // you feel in the chest a moment before the claws land.
+                float slamSwell = Mathf.Exp(-Mathf.Pow((t - 4.7f) / 1.5f, 2f));
+                float sub = Mathf.Sin(2f * Mathf.PI * 28f * t) * slamSwell * 0.4f;
+
+                float swell = Mathf.Pow(
+                    0.5f + 0.5f * Mathf.Sin(2f * Mathf.PI * 0.07f * t - 1.2f), 3f);
+                float whine = Mathf.Sin(2f * Mathf.PI * 587f * t)
+                            * swell * (0.03f + through * 0.05f);
+
+                buf[i] = drone + rumble + sub + whine;
             }
 
-            int beats = (int)(seconds / beatEvery);
-            for (int b = 0; b < beats; b++)
+            // The heartbeat accelerates — 1.7s apart at the start, under 1.0s by the end.
+            // A metronome pulse is atmosphere; one that speeds up is panic, and it does the
+            // work of telling you this is going somewhere.
+            for (float at = 0.15f, gap = 1.7f; at < seconds; at += gap, gap *= 0.86f)
             {
-                AddThump(buf, b * beatEvery, 0.32f);
-                AddThump(buf, b * beatEvery + 0.30f, 0.20f);
+                float urgency = Mathf.InverseLerp(1.7f, 0.9f, gap);
+
+                AddThump(buf, at, 0.3f + urgency * 0.22f);
+                AddThump(buf, at + 0.28f, 0.19f + urgency * 0.14f);
             }
 
-            int fade = (int)(DroneSampleRate * 0.4f);
+            // No loop seam to hide — this clip is a one-shot the length of the sequence, so
+            // it only needs to arrive out of nothing.
+            int fade = (int)(DroneSampleRate * 0.5f);
             for (int i = 0; i < fade; i++)
-            {
-                float t = i / (float)fade;
-                buf[i] = Mathf.Lerp(buf[n - fade + i], buf[i], t);
-            }
+                buf[i] *= i / (float)fade;
 
-            float max = 0f;
-            foreach (float s in buf) max = Mathf.Max(max, Mathf.Abs(s));
-            float scale = max > 1e-5f ? 0.75f / max : 1f;
-            for (int i = 0; i < buf.Length; i++) buf[i] *= scale;
-
+            Normalise(buf, 0.75f);
             WriteWav(DronePath, buf);
             AssetDatabase.Refresh();
+        }
+
+        private static void Normalise(float[] buf, float peak)
+        {
+            float max = 0f;
+            foreach (float s in buf) max = Mathf.Max(max, Mathf.Abs(s));
+
+            float scale = max > 1e-5f ? peak / max : 1f;
+            for (int i = 0; i < buf.Length; i++) buf[i] *= scale;
         }
 
         private static void AddThump(float[] buf, float atSeconds, float gain)
