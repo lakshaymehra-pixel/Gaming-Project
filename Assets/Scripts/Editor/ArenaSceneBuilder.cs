@@ -5,8 +5,8 @@ using Game.Player;
 using Game.UI;
 using Game.Weapons;
 using TMPro;
+using Unity.AI.Navigation;
 using UnityEditor;
-using UnityEditor.AI;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.AI;
@@ -251,8 +251,8 @@ namespace Game.EditorTools
             go.transform.localScale = size;
             go.GetComponent<Renderer>().sharedMaterial = mat;
 
-            // Everything in the arena is walkable-around geometry the NavMesh must respect.
-            GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.NavigationStatic);
+            // No navigation flag needed: the primitive ships with a collider, and the
+            // NavMeshSurface bake collects colliders.
             return go;
         }
 
@@ -912,22 +912,37 @@ namespace Game.EditorTools
 
         // ------------------------------------------------------------------------ navmesh
 
+        /// <summary>
+        /// Bakes the scene's navigation onto a NavMeshSurface.
+        ///
+        /// The surface collects by physics collider, not by the NavigationStatic flag the old
+        /// baker read — which is why the builders no longer set that flag at all. It lands in
+        /// the same place: every prop an agent must path around already carries a collider,
+        /// and the things that deliberately never blocked movement (leaf canopies, grass) have
+        /// no collider and so stay out of the walkable set, exactly as before.
+        ///
+        /// Agents are radius 0.4 / height 2.0 to match the soldier capsule; a surface baked
+        /// for a different agent size produces a mesh the spawned agents cannot stand on.
+        /// </summary>
         internal static void BakeNavMesh()
         {
-            // Qualified because UnityEngine.AI declares a NavMeshBuilder too, and the file
-            // imports both namespaces. The editor one is the baker; the runtime one builds
-            // NavMeshData at play time and cannot write the scene's baked surface.
-            //
-            // Deprecated, and staying anyway: this baker is the only one that honours the
-            // NavigationStatic flags every prop in these builders is marked with. Its
-            // replacement, NavMeshSurface, ignores static flags and collects by collider or
-            // volume instead — migrating means re-auditing which of ~1300 props end up in
-            // the walkable set, for zero behavioural gain today.
-#pragma warning disable 618
-            UnityEditor.AI.NavMeshBuilder.ClearAllNavMeshes();
-            UnityEditor.AI.NavMeshBuilder.BuildNavMesh();
-#pragma warning restore 618
+            GameObject host = GameObject.Find(NavSurfaceName)
+                              ?? new GameObject(NavSurfaceName);
+
+            var surface = host.GetComponent<NavMeshSurface>()
+                          ?? host.AddComponent<NavMeshSurface>();
+
+            surface.collectObjects = CollectObjects.All;
+            surface.useGeometry = NavMeshCollectGeometry.PhysicsColliders;
+            surface.layerMask = ~0;
+
+            surface.RemoveData();
+            surface.BuildNavMesh();
+
+            EditorUtility.SetDirty(surface);
         }
+
+        private const string NavSurfaceName = "NavMesh";
 
         // -------------------------------------------------------------------------- utils
 

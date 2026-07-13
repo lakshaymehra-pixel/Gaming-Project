@@ -35,11 +35,25 @@ namespace Game.Enemies
         [Header("Death")]
         [SerializeField] private float despawnDelay = 4f;
 
+        [Header("Spawn")]
+        [Tooltip("How far from its spawn point the agent may be snapped onto the NavMesh. " +
+                 "Beyond this the spawn point is considered bad and the AI shuts itself off.")]
+        [SerializeField] private float navMeshSnapRadius = 2f;
+
         private NavMeshAgent _agent;
         private Health _health;
         private Transform _target;
         private State _state = State.Idle;
         private float _nextShotTime;
+
+        /// <summary>
+        /// True only when the agent is enabled and actually standing on the NavMesh. Every
+        /// steering call has to go through this: an agent that spawned off-mesh throws on
+        /// SetDestination/isStopped, once per frame, forever.
+        /// </summary>
+        private bool AgentReady => _agent != null
+                                   && _agent.isActiveAndEnabled
+                                   && _agent.isOnNavMesh;
 
         /// <summary>Points at the player once the spawner hands it over.</summary>
         public void SetTarget(Transform target) => _target = target;
@@ -67,9 +81,47 @@ namespace Game.Enemies
             _health.Died -= OnDied;
         }
 
+        private void Start()
+        {
+            SnapOntoNavMesh();
+        }
+
+        /// <summary>
+        /// Pulls the agent onto the nearest NavMesh point. Spawn points are authored by hand
+        /// and baked geometry shifts under them, so an agent that starts a few centimetres
+        /// above the terrain — or inside a rock — is off-mesh, and every steering call it
+        /// makes for the rest of its life logs an error.
+        ///
+        /// Warp rather than moving the transform: setting position on an off-mesh agent does
+        /// not re-register it with the navigation system.
+        /// </summary>
+        private void SnapOntoNavMesh()
+        {
+            if (_agent == null || !_agent.isActiveAndEnabled) return;
+            if (_agent.isOnNavMesh) return;
+
+            if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit,
+                                       navMeshSnapRadius, NavMesh.AllAreas))
+            {
+                _agent.Warp(hit.position);
+                return;
+            }
+
+            // Nowhere to stand. Shutting the AI down beats a frozen soldier that spams the
+            // console — and it points at the real bug, which is the spawn point or the bake.
+            Debug.LogWarning(
+                $"{name}: no NavMesh within {navMeshSnapRadius}m of {transform.position}. " +
+                "Disabling this enemy — check the spawn point placement or re-bake the scene.",
+                this);
+
+            _agent.enabled = false;
+            enabled = false;
+        }
+
         private void Update()
         {
             if (_state == State.Dead || _target == null) return;
+            if (!AgentReady) return;
 
             float distance = Vector3.Distance(transform.position, _target.position);
             bool canSee = distance <= sightRange && HasLineOfSight();
@@ -164,8 +216,8 @@ namespace Game.Enemies
 
             // Stop steering and stop blocking bullets, but leave the body visible for a beat
             // so the kill reads.
-            if (_agent.isOnNavMesh) _agent.isStopped = true;
-            _agent.enabled = false;
+            if (AgentReady) _agent.isStopped = true;
+            if (_agent != null) _agent.enabled = false;
 
             foreach (var col in GetComponentsInChildren<Collider>())
                 col.enabled = false;

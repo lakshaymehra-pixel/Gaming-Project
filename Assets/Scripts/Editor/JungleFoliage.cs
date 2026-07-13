@@ -156,7 +156,8 @@ namespace Game.EditorTools
             trunk.GetComponent<Renderer>().sharedMaterial =
                 rng.NextDouble() > 0.5 ? p.Trunk : p.TrunkDark;
 
-            GameObjectUtility.SetStaticEditorFlags(trunk, StaticEditorFlags.NavigationStatic);
+            // The capsule collider it was created with is what puts it in the NavMesh bake —
+            // the surface collects colliders, so agents path around the trunk automatically.
 
             // Buttress roots — the flared bases of rainforest giants. Cheap, and they sell
             // the scale of the emergents better than making them taller would.
@@ -177,9 +178,6 @@ namespace Game.EditorTools
                     root3.transform.localScale = new Vector3(0.35f, 1.6f, radius * 2.2f);
                     root3.transform.localRotation = Quaternion.Euler(0f, angle, 8f);
                     root3.GetComponent<Renderer>().sharedMaterial = p.TrunkDark;
-
-                    GameObjectUtility.SetStaticEditorFlags(
-                        root3, StaticEditorFlags.NavigationStatic);
                 }
             }
 
@@ -263,10 +261,10 @@ namespace Game.EditorTools
                 seg.transform.localRotation = Quaternion.Euler(0f, 0f, bend);
                 seg.GetComponent<Renderer>().sharedMaterial = p.Trunk;
 
-                if (i == 0)
-                    GameObjectUtility.SetStaticEditorFlags(
-                        seg, StaticEditorFlags.NavigationStatic);
-                else
+                // Only the base segment keeps its collider — that is what an agent bumps into
+                // and what the NavMesh bake carves around. The segments above it are overhead,
+                // so a collider there would just be a phantom obstacle at head height.
+                if (i > 0)
                     Object.DestroyImmediate(seg.GetComponent<CapsuleCollider>());
             }
 
@@ -375,7 +373,8 @@ namespace Game.EditorTools
                 90f, (float)rng.NextDouble() * 180f, (float)rng.NextDouble() * 8f);
 
             log.GetComponent<Renderer>().sharedMaterial = p.Log;
-            GameObjectUtility.SetStaticEditorFlags(log, StaticEditorFlags.NavigationStatic);
+            // Keeps its collider: a fallen log is cover you vault or path around, and the
+            // NavMesh bake picks it up from that collider.
 
             return root;
         }

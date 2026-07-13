@@ -78,11 +78,8 @@ namespace Game.EditorTools
 
             ArenaSceneBuilder.BuildHud(loop, player);
 
-            // The terrain has to be flagged navigation-static before the bake, or the agents
-            // get a NavMesh with a hole where the whole island should be.
-            GameObjectUtility.SetStaticEditorFlags(
-                terrain.gameObject, StaticEditorFlags.NavigationStatic);
-
+            // Nothing to flag for navigation: the surface bake collects physics colliders, and
+            // the terrain carries a TerrainCollider. Batching is a separate concern.
             MarkFoliageStatic();
 
             ArenaSceneBuilder.BakeNavMesh();
@@ -99,8 +96,9 @@ namespace Game.EditorTools
         /// kill the frame rate on a phone — not the triangle count. Batching collapses them
         /// into a handful of calls per material.
         ///
-        /// Run after the props exist and before the NavMesh bake, so the bake sees the final
-        /// flags.
+        /// Batching only — navigation is not a flag any more. Which foliage an agent has to
+        /// path around is decided by the collider: trunks and logs have one, leaf canopies do
+        /// not, and the surface bake collects exactly the former.
         /// </summary>
         private static void MarkFoliageStatic()
         {
@@ -113,9 +111,6 @@ namespace Game.EditorTools
             {
                 if (t.GetComponent<Renderer>() == null) continue;
 
-                // Preserve whatever navigation flag the prop already carries — trunks and logs
-                // are navigation-static so agents path around them, leaves are not — and add
-                // batching on top.
                 StaticEditorFlags flags =
                     GameObjectUtility.GetStaticEditorFlags(t.gameObject);
 
@@ -357,8 +352,6 @@ namespace Game.EditorTools
                     (float)rng.NextDouble() * 25f - 12f);
 
                 rock.GetComponent<Renderer>().sharedMaterial = mats.Rock;
-                GameObjectUtility.SetStaticEditorFlags(
-                    rock, StaticEditorFlags.NavigationStatic);
             }
         }
 
@@ -415,8 +408,6 @@ namespace Game.EditorTools
                         1.5f + (float)rng.NextDouble() * 2f, 2f,
                         1.5f + (float)rng.NextDouble() * 2f);
                     block.GetComponent<Renderer>().sharedMaterial = mats.Ruin;
-                    GameObjectUtility.SetStaticEditorFlags(
-                        block, StaticEditorFlags.NavigationStatic);
                 }
             }
         }
@@ -459,7 +450,6 @@ namespace Game.EditorTools
                 : new Vector3(size.x, size.y, length);
 
             seg.GetComponent<Renderer>().sharedMaterial = mats.Ruin;
-            GameObjectUtility.SetStaticEditorFlags(seg, StaticEditorFlags.NavigationStatic);
         }
 
         // ------------------------------------------------------------------------ spawns
