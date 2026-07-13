@@ -10,13 +10,14 @@ using UnityEngine.UI;
 namespace Game.EditorTools
 {
     /// <summary>
-    /// Builds the horror splash: black screen bleeding red at the top, claw marks over a
-    /// blood splatter, a title that flickers like a dying light, a drone underneath with a
-    /// heartbeat in it, and a loading bar that tracks the island loading behind the dread.
+    /// Builds the KAAL RAAT intro scene: a timed action-horror sequence (gunshots punch
+    /// bullet holes into the dark, the claw emblem slams in, the title types itself out)
+    /// over a drone with a heartbeat in it, while the island loads behind the branding.
     ///
-    /// Everything is generated — the slash and splatter sprites are rendered into
-    /// textures by code, the drone is synthesised into a .wav on first build. The whole
-    /// look lives in the constant block below.
+    /// Every visual is generated — slash, splatter and bullet-hole sprites are rendered
+    /// into textures by code, the drone is synthesised on first build, and the gunshot,
+    /// roar, and tick sounds are reused from the game's own baked audio. The whole look
+    /// lives in the constant block below.
     ///
     /// Run from the menu: Game > Build Splash Scene
     /// </summary>
@@ -25,16 +26,20 @@ namespace Game.EditorTools
         // ------------------------------------------------------------------ THE LOOK
         // Change these, rerun the menu item, done.
 
-        private const string GameTitle = "SHADOW JUNGLE";
-        private const string Tagline = "THE JUNGLE IS WATCHING";
+        private const string GameTitle = "KAAL RAAT";
+        private const string Subtitle = "HORROR  •  SURVIVAL  •  BATTLE ROYALE";
+        private const string Quote =
+            "\"Sabse bada dushman doosre players nahi...\nwoh cheez hai jo raat ko jaagti hai.\"";
+        private const string TapText = "TAP TO ENTER THE NIGHT";
         private const string VersionLabel = "v0.1 — early build";
 
         private static readonly Color Blood = new(0.55f, 0.04f, 0.03f);
-        private static readonly Color BloodBright = new(0.78f, 0.08f, 0.05f);
+        private static readonly Color BloodBright = new(0.82f, 0.10f, 0.06f);
         private static readonly Color BackgroundTop = new(0.07f, 0.015f, 0.012f);
         private static readonly Color BackgroundBottom = new(0.008f, 0.004f, 0.004f);
-        private static readonly Color TitleColor = new(0.82f, 0.78f, 0.72f);   // bone
-        private static readonly Color DimText = new(0.38f, 0.30f, 0.28f);
+        private static readonly Color TitleColor = new(0.85f, 0.80f, 0.72f);   // bone
+        private static readonly Color DimText = new(0.42f, 0.33f, 0.30f);
+        private static readonly Color BulletPale = new(0.85f, 0.78f, 0.70f);
 
         // --------------------------------------------------------------------------
 
@@ -56,7 +61,12 @@ namespace Game.EditorTools
             cam.backgroundColor = Color.black;
             camGo.AddComponent<AudioListener>();
 
-            BuildDroneSource();
+            AudioSource drone = BuildDroneSource();
+
+            var sfxGo = new GameObject("SplashSfx");
+            var sfx = sfxGo.AddComponent<AudioSource>();
+            sfx.playOnAwake = false;
+            sfx.spatialBlend = 0f;
 
             var canvasGo = new GameObject("Splash",
                 typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -72,59 +82,104 @@ namespace Game.EditorTools
 
             BuildBackground(c);
 
+            // Content: everything that fades out at the end.
             var contentGo = new GameObject("Content", typeof(RectTransform), typeof(CanvasGroup));
             contentGo.transform.SetParent(c, false);
             Stretch(contentGo.GetComponent<RectTransform>());
             var content = contentGo.GetComponent<CanvasGroup>();
-            Transform ct = contentGo.transform;
 
-            RectTransform emblem = BuildEmblem(ct);
+            // ShakeRoot: what the gunshots rattle. The loading bar and prompts sit outside
+            // it — UI chrome shaking with the world reads as a bug, not an impact.
+            var shakeGo = new GameObject("ShakeRoot", typeof(RectTransform));
+            shakeGo.transform.SetParent(contentGo.transform, false);
+            Stretch(shakeGo.GetComponent<RectTransform>());
+            var shakeRoot = shakeGo.GetComponent<RectTransform>();
+            Transform st = shakeGo.transform;
 
-            // The title gets its own group so the flicker can dim it without touching the
-            // rest of the layout — the two alphas multiply.
+            RectTransform[] holes = BuildBulletHoles(st);
+            RectTransform emblem = BuildEmblem(st);
+
             var titleGroupGo = new GameObject("TitleGroup",
                 typeof(RectTransform), typeof(CanvasGroup));
-            titleGroupGo.transform.SetParent(ct, false);
+            titleGroupGo.transform.SetParent(st, false);
             Stretch(titleGroupGo.GetComponent<RectTransform>());
             var titleGroup = titleGroupGo.GetComponent<CanvasGroup>();
 
-            TMP_Text title = MakeText(titleGroupGo.transform, "Title", GameTitle, 100,
-                TitleColor, new Vector2(0.5f, 0.5f), new Vector2(0f, -60f));
+            TMP_Text title = MakeText(titleGroupGo.transform, "Title", GameTitle, 128,
+                TitleColor, new Vector2(0.5f, 0.5f), new Vector2(0f, -70f));
             title.fontStyle = FontStyles.Bold;
-            title.characterSpacing = 24f;
+            title.characterSpacing = 34f;
 
-            TMP_Text tagline = MakeText(titleGroupGo.transform, "Tagline", Tagline, 28,
-                DimText, new Vector2(0.5f, 0.5f), new Vector2(0f, -150f));
-            tagline.characterSpacing = 34f;
+            TMP_Text subtitle = MakeText(titleGroupGo.transform, "Subtitle", Subtitle, 30,
+                BloodBright, new Vector2(0.5f, 0.5f), new Vector2(0f, -165f));
+            subtitle.characterSpacing = 16f;
 
-            Image loadingFill = BuildLoadingBar(ct);
+            TMP_Text quote = MakeText(titleGroupGo.transform, "Quote", Quote, 27,
+                DimText, new Vector2(0.5f, 0.5f), new Vector2(0f, -265f));
+            quote.fontStyle = FontStyles.Italic;
 
-            TMP_Text tap = MakeText(ct, "TapPrompt", "TAP IF YOU DARE", 26, BloodBright,
-                new Vector2(0.5f, 0f), new Vector2(0f, 190f));
-            tap.characterSpacing = 24f;
+            Image loadingFill = BuildLoadingBar(contentGo.transform);
 
-            MakeText(ct, "Version", VersionLabel, 20, DimText,
+            TMP_Text tap = MakeText(contentGo.transform, "TapPrompt", TapText, 27,
+                BloodBright, new Vector2(0.5f, 0f), new Vector2(0f, 190f));
+            tap.characterSpacing = 20f;
+
+            MakeText(contentGo.transform, "Version", VersionLabel, 20, DimText,
                 new Vector2(1f, 0f), new Vector2(-140f, 36f));
 
-            // Vignette above everything: the dark closes in from the corners.
+            // Above the content: the dark pressing in, then the flash on the very top so
+            // gunshots and lightning light the whole frame, vignette included.
             BuildVignette(c);
+            Image flash = BuildFlashOverlay(c);
 
             var controller = canvasGo.AddComponent<SplashController>();
             ArenaSceneBuilder.SetPrivate(controller, "content", content);
+            ArenaSceneBuilder.SetPrivate(controller, "shakeRoot", shakeRoot);
+            ArenaSceneBuilder.SetPrivate(controller, "titleGroup", titleGroup);
+            ArenaSceneBuilder.SetPrivate(controller, "emblem", emblem);
+            ArenaSceneBuilder.SetPrivate(controller, "title", title);
+            ArenaSceneBuilder.SetPrivate(controller, "subtitle", subtitle);
+            ArenaSceneBuilder.SetPrivate(controller, "quote", quote);
+            ArenaSceneBuilder.SetPrivate(controller, "flashOverlay", flash);
             ArenaSceneBuilder.SetPrivate(controller, "loadingFill", loadingFill);
             ArenaSceneBuilder.SetPrivate(controller, "tapPrompt", tap);
+            ArenaSceneBuilder.SetPrivate(controller, "droneSource", drone);
+            ArenaSceneBuilder.SetPrivate(controller, "sfxSource", sfx);
             ArenaSceneBuilder.SetPrivate(controller, "nextSceneName", "Island");
+            SetHoles(controller, holes);
 
-            var fx = canvasGo.AddComponent<SplashFx>();
-            ArenaSceneBuilder.SetPrivate(fx, "flickerTarget", titleGroup);
-            ArenaSceneBuilder.SetPrivate(fx, "creepTarget", emblem);
+            WireClip(controller, "gunshotClip", "Assets/Audio/SFX_Fire.wav");
+            WireClip(controller, "roarClip", "Assets/Audio/AMB_Roar.wav");
+            WireClip(controller, "tickClip", "Assets/Audio/SFX_Empty.wav");
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             ArenaSceneBuilder.AddSceneToBuildSettings(ScenePath);
 
             Debug.Log($"<b>Splash built.</b> Saved to {ScenePath}. It boots first and " +
-                      "loads the Island behind the branding — make sure the Island scene " +
-                      "is built too.");
+                      "loads the Island behind the sequence — make sure the Island scene " +
+                      "is built too, and turn the sound on.");
+        }
+
+        private static void SetHoles(SplashController controller, RectTransform[] holes)
+        {
+            var so = new SerializedObject(controller);
+            SerializedProperty prop = so.FindProperty("bulletHoles");
+            prop.arraySize = holes.Length;
+            for (int i = 0; i < holes.Length; i++)
+                prop.GetArrayElementAtIndex(i).objectReferenceValue = holes[i];
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void WireClip(Object target, string field, string path)
+        {
+            var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(path);
+            if (clip == null)
+            {
+                Debug.LogWarning($"Splash: {path} not found — bake the game audio first " +
+                                 "(Game > Bake Weapon Audio / Bake Jungle Ambience).");
+                return;
+            }
+            ArenaSceneBuilder.SetPrivate(target, field, clip);
         }
 
         // ------------------------------------------------------------------ backdrop
@@ -159,8 +214,6 @@ namespace Game.EditorTools
             return tex;
         }
 
-        /// <summary>Radial darkness pressing in from the edges. Drawn last so it sits over
-        /// everything, including the title — the corners of the screen belong to the dark.</summary>
         private static void BuildVignette(Transform parent)
         {
             const string path = "Assets/Settings/T_SplashVignette.asset";
@@ -196,41 +249,115 @@ namespace Game.EditorTools
             raw.raycastTarget = false;
         }
 
-        // -------------------------------------------------------------------- emblem
+        private static Image BuildFlashOverlay(Transform parent)
+        {
+            var go = new GameObject("FlashOverlay", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+            Stretch(go.GetComponent<RectTransform>());
+
+            var image = go.GetComponent<Image>();
+            image.color = Color.clear;
+            image.raycastTarget = false;
+            return image;
+        }
+
+        // -------------------------------------------------------------- bullet holes
 
         /// <summary>
-        /// Three claw slashes over a blood splatter. The slash sprite is a tapered streak —
-        /// thick in the middle, pointed at the ends — which is what separates a claw mark
-        /// from a paint roller.
+        /// Three impacts scattered across the upper screen, each rotated differently so
+        /// one sprite reads as three separate hits.
         /// </summary>
+        private static RectTransform[] BuildBulletHoles(Transform parent)
+        {
+            Sprite sprite = BulletHoleSprite();
+
+            var placements = new (Vector2 pos, float size, float rot)[]
+            {
+                (new Vector2(-640f, 300f), 130f, 20f),
+                (new Vector2(560f, 210f), 150f, 160f),
+                (new Vector2(-210f, 380f), 110f, 275f),
+            };
+
+            var holes = new RectTransform[placements.Length];
+            for (int i = 0; i < placements.Length; i++)
+            {
+                var (pos, size, rot) = placements[i];
+                RectTransform rt = MakeSpriteImage(parent, $"BulletHole_{i}", sprite,
+                    BulletPale, pos, new Vector2(size, size));
+                rt.localRotation = Quaternion.Euler(0f, 0f, rot);
+                holes[i] = rt;
+            }
+
+            return holes;
+        }
+
+        /// <summary>A dark core with pale cracks radiating out — glass hit by a round.</summary>
+        private static Sprite BulletHoleSprite()
+        {
+            var rng = new System.Random(7);
+
+            // Cracks: angle, length (as fraction of half-size), width in radians.
+            var cracks = new (float angle, float length, float width)[10];
+            for (int i = 0; i < cracks.Length; i++)
+            {
+                cracks[i] = (
+                    (float)rng.NextDouble() * Mathf.PI * 2f,
+                    0.45f + (float)rng.NextDouble() * 0.5f,
+                    0.05f + (float)rng.NextDouble() * 0.05f);
+            }
+
+            return LoadOrCreateSprite("S_BulletHole", (x, y, size) =>
+            {
+                var centre = new Vector2(size / 2f, size / 2f);
+                var p = new Vector2(x, y) - centre;
+                float d = p.magnitude / (size / 2f);          // 0 centre, 1 edge
+
+                // Core: solid, with a soft rim.
+                float a = Mathf.Clamp01((0.16f - d) * 18f);
+
+                // Cracks: thin wedges that fade with distance.
+                float angle = Mathf.Atan2(p.y, p.x);
+                foreach (var (ca, length, width) in cracks)
+                {
+                    float diff = Mathf.Abs(Mathf.DeltaAngle(angle * Mathf.Rad2Deg,
+                                                            ca * Mathf.Rad2Deg)) * Mathf.Deg2Rad;
+                    if (d < length && diff < width * (1f - d))
+                        a = Mathf.Max(a, (1f - d / length) * 0.9f);
+                }
+
+                return a;
+            });
+        }
+
+        // -------------------------------------------------------------------- emblem
+
         private static RectTransform BuildEmblem(Transform parent)
         {
             var emblem = new GameObject("Emblem", typeof(RectTransform));
             emblem.transform.SetParent(parent, false);
             var rt = emblem.GetComponent<RectTransform>();
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = new Vector2(0f, 170f);
-            rt.sizeDelta = new Vector2(320f, 320f);
+            rt.anchoredPosition = new Vector2(0f, 190f);
+            rt.sizeDelta = new Vector2(340f, 340f);
 
             MakeSpriteImage(emblem.transform, "Splatter", SplatterSprite(),
                 new Color(Blood.r, Blood.g, Blood.b, 0.55f),
-                new Vector2(10f, -8f), new Vector2(330f, 330f));
+                new Vector2(10f, -8f), new Vector2(350f, 350f));
 
             Sprite slash = SlashSprite();
             MakeSpriteImage(emblem.transform, "Claw_1", slash, BloodBright,
-                new Vector2(-58f, 0f), new Vector2(70f, 300f)).localRotation =
+                new Vector2(-62f, 0f), new Vector2(74f, 320f)).localRotation =
                 Quaternion.Euler(0f, 0f, 14f);
             MakeSpriteImage(emblem.transform, "Claw_2", slash, BloodBright,
-                new Vector2(0f, -12f), new Vector2(74f, 320f)).localRotation =
+                new Vector2(0f, -12f), new Vector2(78f, 340f)).localRotation =
                 Quaternion.Euler(0f, 0f, 12f);
             MakeSpriteImage(emblem.transform, "Claw_3", slash, Blood,
-                new Vector2(58f, -4f), new Vector2(66f, 290f)).localRotation =
+                new Vector2(62f, -4f), new Vector2(70f, 305f)).localRotation =
                 Quaternion.Euler(0f, 0f, 16f);
 
             return rt;
         }
 
-        /// <summary>A vertical streak, widest at the centre, tapering to points.</summary>
         private static Sprite SlashSprite()
         {
             return LoadOrCreateSprite("S_Slash", (x, y, size) =>
@@ -247,13 +374,11 @@ namespace Game.EditorTools
             });
         }
 
-        /// <summary>Random blobs and drips clustered around the middle.</summary>
         private static Sprite SplatterSprite()
         {
             const int size = 256;
             var rng = new System.Random(666);
 
-            // Precompute blob list: position, radius. Drips are tall thin blobs low down.
             var blobs = new (Vector2 pos, Vector2 radius)[26];
             for (int i = 0; i < blobs.Length; i++)
             {
@@ -352,7 +477,7 @@ namespace Game.EditorTools
         /// between them is the unease), a filtered rumble, a faint dissonant whine that
         /// swells and retreats, and a double-thump heartbeat. Synthesised on first build.
         /// </summary>
-        private static void BuildDroneSource()
+        private static AudioSource BuildDroneSource()
         {
             if (!File.Exists(DronePath)) BakeDrone();
 
@@ -366,6 +491,8 @@ namespace Game.EditorTools
             var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(DronePath);
             if (clip != null) source.clip = clip;
             else Debug.LogWarning("Splash: drone clip failed to load after bake.");
+
+            return source;
         }
 
         private static void BakeDrone()
@@ -386,19 +513,16 @@ namespace Game.EditorTools
                 float drone = (Mathf.Sin(2f * Mathf.PI * 41f * t)
                              + Mathf.Sin(2f * Mathf.PI * 41.35f * t)) * 0.22f;
 
-                // Rumble: heavily lowpassed noise.
                 float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
                 lp += (noise - lp) * 0.015f;
                 float rumble = lp * 0.5f;
 
-                // The whine: quiet, dissonant against the drone, swelling on its own cycle.
                 float swell = Mathf.Pow(0.5f + 0.5f * Mathf.Sin(2f * Mathf.PI * 0.07f * t - 1.2f), 3f);
                 float whine = Mathf.Sin(2f * Mathf.PI * 587f * t) * swell * 0.035f;
 
                 buf[i] = drone + rumble + whine;
             }
 
-            // Heartbeat: lub-dub every beatEvery seconds.
             int beats = (int)(seconds / beatEvery);
             for (int b = 0; b < beats; b++)
             {
@@ -406,7 +530,6 @@ namespace Game.EditorTools
                 AddThump(buf, b * beatEvery + 0.30f, 0.20f);
             }
 
-            // Crossfade the seam so the loop never clicks.
             int fade = (int)(DroneSampleRate * 0.4f);
             for (int i = 0; i < fade; i++)
             {
@@ -414,7 +537,6 @@ namespace Game.EditorTools
                 buf[i] = Mathf.Lerp(buf[n - fade + i], buf[i], t);
             }
 
-            // Normalise to a safe peak.
             float max = 0f;
             foreach (float s in buf) max = Mathf.Max(max, Mathf.Abs(s));
             float scale = max > 1e-5f ? 0.75f / max : 1f;
@@ -487,7 +609,7 @@ namespace Game.EditorTools
             rt.anchorMin = rt.anchorMax = anchor;
             rt.pivot = new Vector2(0.5f, 0.5f);
             rt.anchoredPosition = position;
-            rt.sizeDelta = new Vector2(1400f, 140f);
+            rt.sizeDelta = new Vector2(1600f, 160f);
 
             return tmp;
         }
