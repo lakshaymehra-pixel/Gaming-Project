@@ -54,11 +54,17 @@ namespace Game.UI
 
         private void Start()
         {
+            // Start hidden, intro will fade in
             if (mainGroup != null) mainGroup.alpha = 0f;
+            if (logoGroup != null) logoGroup.alpha = 0f;
+            if (bottomGroup != null) bottomGroup.alpha = 0f;
             if (loadingGroup != null) loadingGroup.alpha = 0f;
+            if (termsGroup != null) termsGroup.alpha = 0f;
 
             CreateParticles();
             StartCoroutine(IntroSequence());
+
+            Debug.Log("[Login] Started - fading in...");
 
             if (googleButton != null) googleButton.onClick.AddListener(() => OnLogin("Google"));
             if (facebookButton != null) facebookButton.onClick.AddListener(() => OnLogin("Facebook"));
@@ -88,13 +94,24 @@ namespace Game.UI
 
         private IEnumerator IntroSequence()
         {
-            yield return new WaitForSeconds(0.2f);
-            yield return FadeGroup(mainGroup, 0f, 1f, 0.6f);
-            yield return new WaitForSeconds(0.1f);
-            yield return FadeGroup(logoGroup, 0f, 1f, 0.8f);
+            // Main group must be visible for children to show
+            if (mainGroup != null) mainGroup.alpha = 1f;
+
             yield return new WaitForSeconds(0.3f);
+
+            // Logo fades in
+            Debug.Log("[Login] Showing logo...");
+            yield return FadeGroup(logoGroup, 0f, 1f, 0.8f);
+
+            yield return new WaitForSeconds(0.3f);
+
+            // Bottom buttons fade in
+            Debug.Log("[Login] Showing buttons...");
             yield return FadeGroup(bottomGroup, 0f, 1f, 0.5f);
+
+            // Terms
             yield return FadeGroup(termsGroup, 0f, 1f, 0.3f);
+            Debug.Log("[Login] Ready for input");
         }
 
         // ────────────────────── Login ──────────────────────
