@@ -1000,9 +1000,20 @@ namespace Game.EditorTools
         internal static void AddSceneToBuildSettings(string path)
         {
             var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
-            if (scenes.Exists(s => s.path == path)) return;
 
-            scenes.Insert(0, new EditorBuildSettingsScene(path, true));
+            if (!scenes.Exists(s => s.path == path))
+                scenes.Add(new EditorBuildSettingsScene(path, true));
+
+            // Scene 0 is what the app boots into, and that must always be the splash —
+            // whichever scene happened to be built most recently.
+            int splash = scenes.FindIndex(s => s.path.EndsWith("Splash.unity"));
+            if (splash > 0)
+            {
+                var s = scenes[splash];
+                scenes.RemoveAt(splash);
+                scenes.Insert(0, s);
+            }
+
             EditorBuildSettings.scenes = scenes.ToArray();
         }
     }
