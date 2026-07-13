@@ -98,36 +98,62 @@ namespace Game.EditorTools
             var logoGroup = logoGo.GetComponent<CanvasGroup>();
             logoGroup.alpha = 0f;
 
-            // Game title - BGMI uses big bold centered title
+            // Game title - large bold, BGMI style
             var titleMain = MakeText(logoGo.transform, "TitleMain", "KAAL", 160,
-                TextWhite, new Vector2(0.5f, 0.65f), new Vector2(0f, 60f));
+                TextWhite, new Vector2(0.5f, 0.6f), new Vector2(0f, 80f));
             titleMain.fontStyle = FontStyles.Bold;
             titleMain.characterSpacing = 30f;
+            // Add shadow for depth
+            var shadow1 = titleMain.gameObject.AddComponent<Shadow>();
+            shadow1.effectColor = new Color(0f, 0f, 0f, 0.7f);
+            shadow1.effectDistance = new Vector2(4f, -4f);
 
             var titleSub = MakeText(logoGo.transform, "TitleSub", "RAAT", 160,
-                Gold, new Vector2(0.5f, 0.65f), new Vector2(0f, -100f));
+                Gold, new Vector2(0.5f, 0.6f), new Vector2(0f, -80f));
             titleSub.fontStyle = FontStyles.Bold;
             titleSub.characterSpacing = 30f;
+            // Red shadow for horror glow
+            var shadow2 = titleSub.gameObject.AddComponent<Shadow>();
+            shadow2.effectColor = new Color(0.6f, 0.1f, 0f, 0.5f);
+            shadow2.effectDistance = new Vector2(3f, -3f);
+            // Outline for extra punch
+            var outline = titleSub.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(0.8f, 0.3f, 0f, 0.3f);
+            outline.effectDistance = new Vector2(2f, -2f);
 
             // Tagline under title
             var tagline = MakeText(logoGo.transform, "Tagline",
-                "HORROR  •  SURVIVAL  •  BATTLE ROYALE", 22,
-                GoldDim, new Vector2(0.5f, 0.65f), new Vector2(0f, -200f));
-            tagline.characterSpacing = 8f;
+                "HORROR  •  SURVIVAL  •  BATTLE ROYALE", 24,
+                GoldDim, new Vector2(0.5f, 0.6f), new Vector2(0f, -185f));
+            tagline.characterSpacing = 10f;
 
-            // Gold line separator
-            var lineGo = new GameObject("GoldLine", typeof(RectTransform), typeof(Image));
-            lineGo.transform.SetParent(logoGo.transform, false);
-            var lineRt = lineGo.GetComponent<RectTransform>();
-            lineRt.anchorMin = lineRt.anchorMax = new Vector2(0.5f, 0.65f);
-            lineRt.anchoredPosition = new Vector2(0f, -230f);
-            lineRt.sizeDelta = new Vector2(500f, 2f);
-            lineGo.GetComponent<Image>().color = new Color(Gold.r, Gold.g, Gold.b, 0.4f);
-            lineGo.GetComponent<Image>().raycastTarget = false;
+            // Gold line separator (left)
+            var lineL = new GameObject("GoldLineL", typeof(RectTransform), typeof(Image));
+            lineL.transform.SetParent(logoGo.transform, false);
+            var lineLRt = lineL.GetComponent<RectTransform>();
+            lineLRt.anchorMin = lineLRt.anchorMax = new Vector2(0.5f, 0.6f);
+            lineLRt.anchoredPosition = new Vector2(-200f, -220f);
+            lineLRt.sizeDelta = new Vector2(180f, 2f);
+            lineL.GetComponent<Image>().color = new Color(Gold.r, Gold.g, Gold.b, 0.5f);
+            lineL.GetComponent<Image>().raycastTarget = false;
+
+            // Diamond/dot in center
+            var diamond = MakeText(logoGo.transform, "Diamond", "◆", 16,
+                Gold, new Vector2(0.5f, 0.6f), new Vector2(0f, -220f));
+
+            // Gold line separator (right)
+            var lineR = new GameObject("GoldLineR", typeof(RectTransform), typeof(Image));
+            lineR.transform.SetParent(logoGo.transform, false);
+            var lineRRt = lineR.GetComponent<RectTransform>();
+            lineRRt.anchorMin = lineRRt.anchorMax = new Vector2(0.5f, 0.6f);
+            lineRRt.anchoredPosition = new Vector2(200f, -220f);
+            lineRRt.sizeDelta = new Vector2(180f, 2f);
+            lineR.GetComponent<Image>().color = new Color(Gold.r, Gold.g, Gold.b, 0.5f);
+            lineR.GetComponent<Image>().raycastTarget = false;
 
             // Season/version text
-            MakeText(logoGo.transform, "Season", "SEASON 1", 18,
-                TextDim, new Vector2(0.5f, 0.65f), new Vector2(0f, -260f));
+            MakeText(logoGo.transform, "Season", "S E A S O N  1  •  E A R L Y  A C C E S S",
+                16, TextDim, new Vector2(0.5f, 0.6f), new Vector2(0f, -255f));
 
             // ── Bottom bar with login buttons ──
             var bottomGo = MakeGroup(m, "BottomGroup");
@@ -151,31 +177,31 @@ namespace Game.EditorTools
                 "SELECT LOGIN METHOD", 20,
                 TextDim, new Vector2(0.5f, 0f), new Vector2(0f, 280f));
 
-            // Login buttons - horizontal row (BGMI style)
-            float btnY = 200f;
-            float btnSize = 90f;
-            float spacing = 130f;
+            // Login buttons - horizontal row (BGMI style, larger with glow borders)
+            float btnY = 195f;
+            float btnSize = 100f;
+            float spacing = 150f;
             float startX = -spacing * 1.5f;
 
             Button googleBtn = MakeIconButton(bottomGo.transform, "Google", "G",
-                BtnGoogle, new Vector2(startX, btnY), btnSize);
-            MakeText(bottomGo.transform, "GoogleLabel", "Google", 14,
-                TextDim, new Vector2(0.5f, 0f), new Vector2(startX, btnY - 58f));
+                BtnGoogle, Gold, new Vector2(startX, btnY), btnSize);
+            MakeText(bottomGo.transform, "GoogleLabel", "Google", 16,
+                TextWhite, new Vector2(0.5f, 0f), new Vector2(startX, btnY - 65f));
 
             Button fbBtn = MakeIconButton(bottomGo.transform, "Facebook", "f",
-                BtnFacebook, new Vector2(startX + spacing, btnY), btnSize);
-            MakeText(bottomGo.transform, "FBLabel", "Facebook", 14,
-                TextDim, new Vector2(0.5f, 0f), new Vector2(startX + spacing, btnY - 58f));
+                BtnFacebook, Gold, new Vector2(startX + spacing, btnY), btnSize);
+            MakeText(bottomGo.transform, "FBLabel", "Facebook", 16,
+                TextWhite, new Vector2(0.5f, 0f), new Vector2(startX + spacing, btnY - 65f));
 
             Button twitterBtn = MakeIconButton(bottomGo.transform, "Twitter", "X",
-                BtnTwitter, new Vector2(startX + spacing * 2, btnY), btnSize);
-            MakeText(bottomGo.transform, "TwitterLabel", "Twitter", 14,
-                TextDim, new Vector2(0.5f, 0f), new Vector2(startX + spacing * 2, btnY - 58f));
+                BtnTwitter, Gold, new Vector2(startX + spacing * 2, btnY), btnSize);
+            MakeText(bottomGo.transform, "TwitterLabel", "Twitter", 16,
+                TextWhite, new Vector2(0.5f, 0f), new Vector2(startX + spacing * 2, btnY - 65f));
 
             Button guestBtn = MakeIconButton(bottomGo.transform, "Guest", "?",
-                BtnGuest, new Vector2(startX + spacing * 3, btnY), btnSize);
-            MakeText(bottomGo.transform, "GuestLabel", "Guest", 14,
-                TextDim, new Vector2(0.5f, 0f), new Vector2(startX + spacing * 3, btnY - 58f));
+                BtnGuest, Gold, new Vector2(startX + spacing * 3, btnY), btnSize);
+            MakeText(bottomGo.transform, "GuestLabel", "Guest", 16,
+                TextWhite, new Vector2(0.5f, 0f), new Vector2(startX + spacing * 3, btnY - 65f));
 
             // ── Loading group (shown after login) ──
             var loadingGo = MakeGroup(m, "LoadingGroup");
@@ -257,7 +283,11 @@ namespace Game.EditorTools
             ArenaSceneBuilder.SaveSceneChecked(scene, ScenePath);
             ArenaSceneBuilder.AddSceneToBuildSettings(ScenePath);
 
-            Debug.Log($"<b>Login scene built (BGMI style).</b> Saved to {ScenePath}.");
+            // Ensure build order: Splash(0), Login(1), Island(2+)
+            EnsureBuildOrder();
+
+            Debug.Log($"<b>Login scene built (BGMI style).</b> Saved to {ScenePath}. " +
+                      "Build order: Splash → Login → Island.");
         }
 
         // ── Background gradient ──
@@ -296,10 +326,22 @@ namespace Game.EditorTools
             return src;
         }
 
-        // ── Icon button (circular, BGMI style) ──
+        // ── Icon button with glow border (BGMI style) ──
         private static Button MakeIconButton(Transform parent, string name, string icon,
-            Color bgColor, Vector2 pos, float size)
+            Color bgColor, Color borderColor, Vector2 pos, float size)
         {
+            // Outer glow/border
+            var borderGo = new GameObject(name + "Border", typeof(RectTransform), typeof(Image));
+            borderGo.transform.SetParent(parent, false);
+            var borderRt = borderGo.GetComponent<RectTransform>();
+            borderRt.anchorMin = borderRt.anchorMax = new Vector2(0.5f, 0f);
+            borderRt.anchoredPosition = pos;
+            borderRt.sizeDelta = new Vector2(size + 6f, size + 6f);
+            borderGo.GetComponent<Image>().color = new Color(
+                borderColor.r, borderColor.g, borderColor.b, 0.4f);
+            borderGo.GetComponent<Image>().raycastTarget = false;
+
+            // Main button
             var go = new GameObject(name + "Btn", typeof(RectTransform),
                 typeof(Image), typeof(Button));
             go.transform.SetParent(parent, false);
@@ -312,19 +354,26 @@ namespace Game.EditorTools
             var img = go.GetComponent<Image>();
             img.color = bgColor;
 
+            // Highlight effect
+            var btn = go.GetComponent<Button>();
+            var colors = btn.colors;
+            colors.highlightedColor = new Color(1.2f, 1.2f, 1.2f);
+            colors.pressedColor = new Color(0.7f, 0.7f, 0.7f);
+            btn.colors = colors;
+
             // Icon text inside
             var iconGo = new GameObject("Icon", typeof(RectTransform));
             iconGo.transform.SetParent(go.transform, false);
             Stretch(iconGo.GetComponent<RectTransform>());
             var tmp = iconGo.AddComponent<TextMeshProUGUI>();
             tmp.text = icon;
-            tmp.fontSize = 40;
+            tmp.fontSize = 44;
             tmp.color = Color.white;
             tmp.fontStyle = FontStyles.Bold;
             tmp.alignment = TextAlignmentOptions.Center;
             tmp.raycastTarget = false;
 
-            return go.GetComponent<Button>();
+            return btn;
         }
 
         // ── Helpers ──
@@ -352,6 +401,36 @@ namespace Game.EditorTools
             tmp.alignment = TextAlignmentOptions.Center;
             tmp.raycastTarget = false;
             return tmp;
+        }
+
+        /// <summary>
+        /// Forces Splash at 0, Login at 1, everything else after.
+        /// </summary>
+        private static void EnsureBuildOrder()
+        {
+            var all = new System.Collections.Generic.List<EditorBuildSettingsScene>(
+                EditorBuildSettings.scenes);
+
+            // Remove missing files
+            all.RemoveAll(s => !System.IO.File.Exists(s.path));
+
+            // Pull splash and login to front in correct order
+            var splash = all.FindIndex(s => s.path.EndsWith("Splash.unity"));
+            if (splash > 0) { var s = all[splash]; all.RemoveAt(splash); all.Insert(0, s); }
+
+            var login = all.FindIndex(s => s.path.EndsWith("Login.unity"));
+            if (login >= 0 && login != 1)
+            {
+                var l = all[login];
+                all.RemoveAt(login);
+                all.Insert(Mathf.Min(1, all.Count), l);
+            }
+
+            EditorBuildSettings.scenes = all.ToArray();
+
+            // Log the order
+            for (int i = 0; i < all.Count; i++)
+                Debug.Log($"  Build index {i}: {all[i].path}");
         }
 
         private static void Stretch(RectTransform rt)

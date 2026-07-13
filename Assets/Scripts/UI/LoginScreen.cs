@@ -75,6 +75,7 @@ namespace Game.UI
         private void Update()
         {
             AnimateParticles();
+            AnimateTitle();
 
             // Tap to continue after logged in
             if (_loggedIn && !_transitioning)
@@ -88,6 +89,16 @@ namespace Game.UI
                     StartCoroutine(EnterGame());
                 }
             }
+        }
+
+        /// <summary>Subtle glow pulse on the title for a living feel.</summary>
+        private void AnimateTitle()
+        {
+            if (logoGroup == null || logoGroup.alpha < 0.5f) return;
+
+            // Gentle breathing glow
+            float glow = 0.85f + 0.15f * Mathf.Sin(Time.time * 1.2f);
+            logoGroup.alpha = glow;
         }
 
         // ────────────────────── Intro ──────────────────────
