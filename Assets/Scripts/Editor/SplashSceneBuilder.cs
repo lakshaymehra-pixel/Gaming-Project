@@ -166,7 +166,7 @@ namespace Game.EditorTools
             ArenaSceneBuilder.SetPrivate(controller, "droneSource", drone);
             ArenaSceneBuilder.SetPrivate(controller, "bedSource", bed);
             ArenaSceneBuilder.SetPrivate(controller, "sfxSource", sfx);
-            ArenaSceneBuilder.SetPrivate(controller, "nextSceneName", "Island");
+            ArenaSceneBuilder.SetPrivate(controller, "nextSceneName", "Login");
             ArenaSceneBuilder.SetPrivate(controller, "ageWarningGroup", ageWarning);
             ArenaSceneBuilder.SetPrivate(controller, "studioGroup", studio);
             ArenaSceneBuilder.SetPrivate(controller, "poweredByGroup", poweredBy);

@@ -53,9 +53,11 @@ git clone https://github.com/lakshaymehra-pixel/Gaming-Project.git
    HUD, NavMesh). Takes 1–3 minutes; the editor looks frozen while ~1300 props are
    placed. Let it finish. The Console should print `Jungle: Canopy — placed 340/340`
    style lines and end with `Island built.`
-3. **Game → Build Splash Scene** — the intro. Build it *after* the Island, because it
-   loads the Island behind itself and needs it present in the build settings.
-4. Press **▶ Play** from the Splash scene. Click inside the Game view once so the cursor
+3. **Game → Build Login Scene** — the BGMI-style login screen (username/guest/Google).
+4. **Game → Build Splash Scene** — the intro. Build it *after* the others because it
+   loads the Login scene behind itself.
+5. Press **▶ Play** from the Splash scene. The flow is:
+   **Splash → Login → Island (game)**. Click inside the Game view once so the cursor
    locks.
 
 The audio (.wav) files are committed, so no baking is needed on a fresh clone. If you ever
