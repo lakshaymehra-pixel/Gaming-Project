@@ -7,28 +7,37 @@ using UnityEngine.UI;
 namespace Game.UI
 {
     /// <summary>
-    /// BGMI-style login/welcome screen shown after the splash.
-    /// Offers guest login or username entry before entering the main game.
+    /// Exact BGMI-style login screen:
+    /// - Full dark background with floating particles
+    /// - Game logo large at top
+    /// - Bottom strip with social login icons (Google, Facebook, Twitter, Guest)
+    /// - "Tap to continue" after login
+    /// - Terms/Privacy at very bottom
+    /// - Background music loop
     /// </summary>
     public class LoginScreen : MonoBehaviour
     {
         [Header("UI Groups")]
         [SerializeField] private CanvasGroup mainGroup;
-        [SerializeField] private CanvasGroup titleGroup;
-        [SerializeField] private CanvasGroup buttonsGroup;
-        [SerializeField] private CanvasGroup usernameGroup;
+        [SerializeField] private CanvasGroup logoGroup;
+        [SerializeField] private CanvasGroup bottomGroup;
+        [SerializeField] private CanvasGroup loadingGroup;
         [SerializeField] private CanvasGroup termsGroup;
-        [SerializeField] private Image backgroundOverlay;
+        [SerializeField] private Image backgroundImage;
 
-        [Header("Input")]
-        [SerializeField] private TMP_InputField usernameInput;
-        [SerializeField] private TMP_Text welcomeText;
-        [SerializeField] private TMP_Text errorText;
+        [Header("Particles")]
+        [SerializeField] private RectTransform particleContainer;
 
         [Header("Buttons")]
-        [SerializeField] private Button guestButton;
-        [SerializeField] private Button loginButton;
         [SerializeField] private Button googleButton;
+        [SerializeField] private Button facebookButton;
+        [SerializeField] private Button twitterButton;
+        [SerializeField] private Button guestButton;
+
+        [Header("Loading")]
+        [SerializeField] private TMP_Text loadingText;
+        [SerializeField] private TMP_Text tapText;
+        [SerializeField] private Image loadingBar;
 
         [Header("Next Scene")]
         [SerializeField] private string nextSceneName = "Island";
@@ -38,136 +47,196 @@ namespace Game.UI
         [SerializeField] private AudioSource sfxSource;
         [SerializeField] private AudioClip clickClip;
 
+        private bool _loggedIn;
         private bool _transitioning;
+        private float _loadingProgress;
+        private Image[] _particles;
 
         private void Start()
         {
-            // Fade in
             if (mainGroup != null) mainGroup.alpha = 0f;
+            if (loadingGroup != null) loadingGroup.alpha = 0f;
+
+            CreateParticles();
             StartCoroutine(IntroSequence());
 
-            // Wire buttons
-            if (guestButton != null) guestButton.onClick.AddListener(OnGuestLogin);
-            if (loginButton != null) loginButton.onClick.AddListener(OnUsernameLogin);
-            if (googleButton != null) googleButton.onClick.AddListener(OnGoogleLogin);
+            if (googleButton != null) googleButton.onClick.AddListener(() => OnLogin("Google"));
+            if (facebookButton != null) facebookButton.onClick.AddListener(() => OnLogin("Facebook"));
+            if (twitterButton != null) twitterButton.onClick.AddListener(() => OnLogin("Twitter"));
+            if (guestButton != null) guestButton.onClick.AddListener(() => OnLogin("Guest"));
         }
+
+        private void Update()
+        {
+            AnimateParticles();
+
+            // Tap to continue after logged in
+            if (_loggedIn && !_transitioning)
+            {
+                if (tapText != null)
+                    tapText.alpha = 0.5f + 0.5f * Mathf.Sin(Time.time * 3f);
+
+                if (Input.anyKeyDown || (Input.touchCount > 0 &&
+                    Input.GetTouch(0).phase == TouchPhase.Began))
+                {
+                    StartCoroutine(EnterGame());
+                }
+            }
+        }
+
+        // ────────────────────── Intro ──────────────────────
 
         private IEnumerator IntroSequence()
         {
-            yield return new WaitForSeconds(0.3f);
-
-            // Fade in main
-            yield return FadeGroup(mainGroup, 0f, 1f, 0.8f);
-
             yield return new WaitForSeconds(0.2f);
-
-            // Title fades in
-            yield return FadeGroup(titleGroup, 0f, 1f, 0.6f);
-
+            yield return FadeGroup(mainGroup, 0f, 1f, 0.6f);
+            yield return new WaitForSeconds(0.1f);
+            yield return FadeGroup(logoGroup, 0f, 1f, 0.8f);
             yield return new WaitForSeconds(0.3f);
-
-            // Buttons slide in
-            yield return FadeGroup(buttonsGroup, 0f, 1f, 0.5f);
-
-            // Terms at bottom
-            yield return FadeGroup(termsGroup, 0f, 1f, 0.4f);
+            yield return FadeGroup(bottomGroup, 0f, 1f, 0.5f);
+            yield return FadeGroup(termsGroup, 0f, 1f, 0.3f);
         }
 
-        // ────────────────────── Button Handlers ──────────────────────
+        // ────────────────────── Login ──────────────────────
 
-        private void OnGuestLogin()
+        private void OnLogin(string method)
         {
-            if (_transitioning) return;
+            if (_loggedIn || _transitioning) return;
             PlayClick();
 
-            // Save as guest
-            string guestName = "Soldier_" + Random.Range(1000, 9999);
-            PlayerPrefs.SetString("PlayerName", guestName);
+            string playerName = method == "Guest"
+                ? "Soldier_" + Random.Range(1000, 9999)
+                : method + "_Player";
+
+            PlayerPrefs.SetString("PlayerName", playerName);
+            PlayerPrefs.SetString("LoginMethod", method);
             PlayerPrefs.Save();
 
-            if (welcomeText != null)
-                welcomeText.text = $"Welcome, {guestName}!";
-
-            StartCoroutine(TransitionToGame());
+            StartCoroutine(LoginSequence(method, playerName));
         }
 
-        private void OnUsernameLogin()
+        private IEnumerator LoginSequence(string method, string playerName)
         {
-            if (_transitioning) return;
-            PlayClick();
+            _loggedIn = true;
 
-            if (usernameInput == null) return;
+            // Hide buttons, show loading
+            yield return FadeGroup(bottomGroup, 1f, 0f, 0.3f);
 
-            string name = usernameInput.text.Trim();
-            if (string.IsNullOrEmpty(name) || name.Length < 3)
+            if (loadingGroup != null)
             {
-                if (errorText != null)
-                {
-                    errorText.text = "Username must be at least 3 characters!";
-                    errorText.gameObject.SetActive(true);
-                }
-                return;
+                loadingGroup.alpha = 0f;
+                yield return FadeGroup(loadingGroup, 0f, 1f, 0.4f);
             }
 
-            if (name.Length > 16)
+            // Fake loading animation
+            if (loadingText != null)
+                loadingText.text = "Connecting...";
+
+            yield return AnimateLoading("Connecting...", 0f, 0.3f, 1.0f);
+            yield return AnimateLoading("Authenticating...", 0.3f, 0.6f, 0.8f);
+            yield return AnimateLoading("Loading profile...", 0.6f, 0.9f, 0.6f);
+            yield return AnimateLoading($"Welcome, {playerName}", 0.9f, 1f, 0.4f);
+
+            yield return new WaitForSeconds(0.5f);
+
+            // Show "tap to continue"
+            if (tapText != null)
             {
-                if (errorText != null)
-                {
-                    errorText.text = "Username must be under 16 characters!";
-                    errorText.gameObject.SetActive(true);
-                }
-                return;
+                tapText.gameObject.SetActive(true);
+                tapText.alpha = 0f;
             }
-
-            // Save username
-            PlayerPrefs.SetString("PlayerName", name);
-            PlayerPrefs.Save();
-
-            if (errorText != null) errorText.gameObject.SetActive(false);
-            if (welcomeText != null)
-                welcomeText.text = $"Welcome, {name}!";
-
-            StartCoroutine(TransitionToGame());
         }
 
-        private void OnGoogleLogin()
+        private IEnumerator AnimateLoading(string text, float fromBar, float toBar,
+            float duration)
         {
-            if (_transitioning) return;
-            PlayClick();
+            if (loadingText != null) loadingText.text = text;
 
-            // Google sign-in placeholder — show message
-            if (errorText != null)
+            float t = 0f;
+            while (t < duration)
             {
-                errorText.text = "Google Sign-In coming soon!";
-                errorText.color = new Color(1f, 0.8f, 0.3f);
-                errorText.gameObject.SetActive(true);
+                t += Time.deltaTime;
+                float p = t / duration;
+                if (loadingBar != null)
+                    loadingBar.fillAmount = Mathf.Lerp(fromBar, toBar, p);
+                yield return null;
             }
+            if (loadingBar != null) loadingBar.fillAmount = toBar;
         }
 
-        // ────────────────────── Transition ──────────────────────
+        // ────────────────────── Enter Game ──────────────────────
 
-        private IEnumerator TransitionToGame()
+        private IEnumerator EnterGame()
         {
             _transitioning = true;
+            PlayClick();
 
-            // Show welcome text
-            if (usernameGroup != null)
-            {
-                usernameGroup.alpha = 0f;
-                usernameGroup.gameObject.SetActive(true);
-                yield return FadeGroup(usernameGroup, 0f, 1f, 0.5f);
-            }
+            if (bgmSource != null) StartCoroutine(FadeAudio(bgmSource, 0.6f));
+            yield return FadeGroup(mainGroup, 1f, 0f, 0.5f);
 
-            yield return new WaitForSeconds(1.0f);
-
-            // Fade out everything
-            if (bgmSource != null)
-                StartCoroutine(FadeAudio(bgmSource, 0.8f));
-
-            yield return FadeGroup(mainGroup, 1f, 0f, 0.6f);
-
-            // Load game
             SceneManager.LoadScene(nextSceneName);
+        }
+
+        // ────────────────────── Particles ──────────────────────
+
+        private void CreateParticles()
+        {
+            if (particleContainer == null) return;
+
+            _particles = new Image[30];
+            for (int i = 0; i < _particles.Length; i++)
+            {
+                var go = new GameObject($"Particle_{i}", typeof(RectTransform),
+                    typeof(Image));
+                go.transform.SetParent(particleContainer, false);
+
+                var rt = go.GetComponent<RectTransform>();
+                rt.anchorMin = rt.anchorMax = new Vector2(
+                    Random.Range(0f, 1f), Random.Range(0f, 1f));
+                float size = Random.Range(2f, 6f);
+                rt.sizeDelta = new Vector2(size, size);
+
+                var img = go.GetComponent<Image>();
+                float brightness = Random.Range(0.15f, 0.4f);
+                img.color = new Color(brightness, brightness * 0.8f, brightness * 0.5f,
+                    Random.Range(0.1f, 0.4f));
+                img.raycastTarget = false;
+
+                _particles[i] = img;
+            }
+        }
+
+        private void AnimateParticles()
+        {
+            if (_particles == null) return;
+
+            for (int i = 0; i < _particles.Length; i++)
+            {
+                if (_particles[i] == null) continue;
+                var rt = _particles[i].rectTransform;
+
+                // Slow upward drift
+                float speed = 5f + i * 1.5f;
+                rt.anchoredPosition += Vector2.up * speed * Time.deltaTime;
+
+                // Slight horizontal sway
+                float sway = Mathf.Sin(Time.time * (0.3f + i * 0.05f) + i) * 0.3f;
+                var pos = rt.anchoredPosition;
+                pos.x += sway;
+                rt.anchoredPosition = pos;
+
+                // Wrap around when off screen
+                if (rt.anchoredPosition.y > 600f)
+                {
+                    rt.anchoredPosition = new Vector2(
+                        Random.Range(-900f, 900f), -600f);
+                }
+
+                // Pulse alpha
+                var c = _particles[i].color;
+                c.a = (0.1f + 0.3f * Mathf.Sin(Time.time + i)) * 0.5f;
+                _particles[i].color = c;
+            }
         }
 
         // ────────────────────── Helpers ──────────────────────

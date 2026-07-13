@@ -9,8 +9,13 @@ using UnityEngine.UI;
 namespace Game.EditorTools
 {
     /// <summary>
-    /// Builds the BGMI-style login screen: dark military theme with username entry,
-    /// guest login, and Google sign-in placeholder. Sits between the splash and the game.
+    /// Builds exact BGMI-style login screen:
+    /// - Dark background with floating ember particles
+    /// - Large game logo centered-top
+    /// - Bottom bar with social login icons (Google, Facebook, Twitter, Guest)
+    /// - Loading bar + "Tap to continue" after login
+    /// - Terms at very bottom
+    /// - Ambient BGM loop
     ///
     /// Run from: Game > Build Login Scene
     /// </summary>
@@ -18,19 +23,19 @@ namespace Game.EditorTools
     {
         private const string ScenePath = "Assets/Scenes/Login.unity";
 
-        // ── Colours ──
-        private static readonly Color BgDark = new(0.04f, 0.04f, 0.06f);
-        private static readonly Color BgCard = new(0.08f, 0.08f, 0.12f, 0.95f);
-        private static readonly Color Accent = new(0.95f, 0.55f, 0.05f);       // gold
-        private static readonly Color AccentDim = new(0.7f, 0.4f, 0.03f);
-        private static readonly Color BloodRed = new(0.7f, 0.12f, 0.08f);
-        private static readonly Color TextWhite = new(0.9f, 0.9f, 0.9f);
-        private static readonly Color TextDim = new(0.45f, 0.45f, 0.5f);
-        private static readonly Color InputBg = new(0.06f, 0.06f, 0.09f);
-        private static readonly Color InputBorder = new(0.2f, 0.2f, 0.25f);
-        private static readonly Color BtnGreen = new(0.15f, 0.65f, 0.3f);
-        private static readonly Color BtnBlue = new(0.2f, 0.45f, 0.85f);
-        private static readonly Color BtnGrey = new(0.2f, 0.2f, 0.25f);
+        // BGMI-style dark military palette
+        private static readonly Color BgTop = new(0.06f, 0.04f, 0.03f);
+        private static readonly Color BgBot = new(0.02f, 0.015f, 0.01f);
+        private static readonly Color Gold = new(0.92f, 0.72f, 0.15f);
+        private static readonly Color GoldDim = new(0.6f, 0.45f, 0.1f);
+        private static readonly Color TextWhite = new(0.92f, 0.9f, 0.88f);
+        private static readonly Color TextDim = new(0.4f, 0.38f, 0.35f);
+        private static readonly Color BarBg = new(0.15f, 0.12f, 0.1f);
+        private static readonly Color BtnGoogle = new(0.85f, 0.32f, 0.25f);
+        private static readonly Color BtnFacebook = new(0.23f, 0.35f, 0.6f);
+        private static readonly Color BtnTwitter = new(0.1f, 0.14f, 0.18f);
+        private static readonly Color BtnGuest = new(0.35f, 0.35f, 0.32f);
+        private static readonly Color BottomBar = new(0.03f, 0.025f, 0.02f, 0.9f);
 
         [MenuItem("Game/Build Login Scene")]
         public static void Build()
@@ -44,17 +49,17 @@ namespace Game.EditorTools
             var camGo = new GameObject("Camera");
             var cam = camGo.AddComponent<Camera>();
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = BgDark;
+            cam.backgroundColor = BgBot;
             cam.orthographic = true;
             camGo.AddComponent<AudioListener>();
 
-            // SFX source
+            // SFX
             var sfxGo = new GameObject("SFX");
             var sfx = sfxGo.AddComponent<AudioSource>();
             sfx.playOnAwake = false;
             sfx.spatialBlend = 0f;
 
-            // BGM - ambient drone
+            // BGM
             AudioSource bgm = BuildBgm();
 
             // Event system
@@ -69,195 +74,213 @@ namespace Game.EditorTools
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             var scaler = canvasGo.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.referenceResolution = new Vector2(1080f, 2340f);  // mobile portrait
             scaler.matchWidthOrHeight = 0.5f;
 
             Transform c = canvasGo.transform;
 
-            // ── Main Group (for fade in/out) ──
+            // ── Main group ──
             var mainGo = MakeGroup(c, "MainGroup");
             var mainGroup = mainGo.GetComponent<CanvasGroup>();
             Transform m = mainGo.transform;
 
-            // Background
-            var bg = MakeImage(m, "Background", BgDark, Vector2.zero, Vector2.zero, true);
+            // Background gradient
+            BuildGradientBg(m);
 
-            // ── Title Group ──
-            var titleGo = MakeGroup(m, "TitleGroup");
-            var titleGroup = titleGo.GetComponent<CanvasGroup>();
-            titleGroup.alpha = 0f;
+            // Particle container
+            var particleGo = new GameObject("Particles", typeof(RectTransform));
+            particleGo.transform.SetParent(m, false);
+            Stretch(particleGo.GetComponent<RectTransform>());
+            var particleContainer = particleGo.GetComponent<RectTransform>();
 
-            // Game title
-            var title = MakeText(titleGo.transform, "Title", "KAAL RAAT", 90,
-                TextWhite, new Vector2(0.5f, 1f), new Vector2(0f, -100f));
-            title.fontStyle = FontStyles.Bold;
-            title.characterSpacing = 20f;
+            // ── Logo Group (center-top area) ──
+            var logoGo = MakeGroup(m, "LogoGroup");
+            var logoGroup = logoGo.GetComponent<CanvasGroup>();
+            logoGroup.alpha = 0f;
 
-            // Subtitle
-            var sub = MakeText(titleGo.transform, "Subtitle",
+            // Game title - BGMI uses big bold centered title
+            var titleMain = MakeText(logoGo.transform, "TitleMain", "KAAL", 160,
+                TextWhite, new Vector2(0.5f, 0.65f), new Vector2(0f, 60f));
+            titleMain.fontStyle = FontStyles.Bold;
+            titleMain.characterSpacing = 30f;
+
+            var titleSub = MakeText(logoGo.transform, "TitleSub", "RAAT", 160,
+                Gold, new Vector2(0.5f, 0.65f), new Vector2(0f, -100f));
+            titleSub.fontStyle = FontStyles.Bold;
+            titleSub.characterSpacing = 30f;
+
+            // Tagline under title
+            var tagline = MakeText(logoGo.transform, "Tagline",
                 "HORROR  •  SURVIVAL  •  BATTLE ROYALE", 22,
-                BloodRed, new Vector2(0.5f, 1f), new Vector2(0f, -170f));
-            sub.characterSpacing = 10f;
+                GoldDim, new Vector2(0.5f, 0.65f), new Vector2(0f, -200f));
+            tagline.characterSpacing = 8f;
 
-            // Decorative line
-            var line = MakeImage(titleGo.transform, "Line", Accent,
-                new Vector2(0.5f, 1f), new Vector2(0f, -195f), false);
-            line.GetComponent<RectTransform>().sizeDelta = new Vector2(400f, 2f);
+            // Gold line separator
+            var lineGo = new GameObject("GoldLine", typeof(RectTransform), typeof(Image));
+            lineGo.transform.SetParent(logoGo.transform, false);
+            var lineRt = lineGo.GetComponent<RectTransform>();
+            lineRt.anchorMin = lineRt.anchorMax = new Vector2(0.5f, 0.65f);
+            lineRt.anchoredPosition = new Vector2(0f, -230f);
+            lineRt.sizeDelta = new Vector2(500f, 2f);
+            lineGo.GetComponent<Image>().color = new Color(Gold.r, Gold.g, Gold.b, 0.4f);
+            lineGo.GetComponent<Image>().raycastTarget = false;
 
-            // ── Buttons Group ──
-            var buttonsGo = MakeGroup(m, "ButtonsGroup");
-            var buttonsGroup = buttonsGo.GetComponent<CanvasGroup>();
-            buttonsGroup.alpha = 0f;
-            Transform b = buttonsGo.transform;
+            // Season/version text
+            MakeText(logoGo.transform, "Season", "SEASON 1", 18,
+                TextDim, new Vector2(0.5f, 0.65f), new Vector2(0f, -260f));
 
-            // Card background for login area
-            var card = MakeImage(b, "Card", BgCard,
-                new Vector2(0.5f, 0.5f), new Vector2(0f, -20f), false);
-            card.GetComponent<RectTransform>().sizeDelta = new Vector2(600f, 420f);
+            // ── Bottom bar with login buttons ──
+            var bottomGo = MakeGroup(m, "BottomGroup");
+            var bottomGroup = bottomGo.GetComponent<CanvasGroup>();
+            bottomGroup.alpha = 0f;
 
-            Transform cr = card.transform;
+            // Dark bottom strip (BGMI style)
+            var stripGo = new GameObject("BottomStrip", typeof(RectTransform), typeof(Image));
+            stripGo.transform.SetParent(bottomGo.transform, false);
+            var stripRt = stripGo.GetComponent<RectTransform>();
+            stripRt.anchorMin = new Vector2(0f, 0f);
+            stripRt.anchorMax = new Vector2(1f, 0f);
+            stripRt.pivot = new Vector2(0.5f, 0f);
+            stripRt.anchoredPosition = Vector2.zero;
+            stripRt.sizeDelta = new Vector2(0f, 320f);
+            stripGo.GetComponent<Image>().color = BottomBar;
+            stripGo.GetComponent<Image>().raycastTarget = false;
 
-            // Username label
-            MakeText(cr, "UsernameLabel", "ENTER YOUR CALLSIGN", 20,
-                TextDim, new Vector2(0.5f, 1f), new Vector2(0f, -30f));
+            // "Select login method" text
+            MakeText(bottomGo.transform, "SelectLabel",
+                "SELECT LOGIN METHOD", 20,
+                TextDim, new Vector2(0.5f, 0f), new Vector2(0f, 280f));
 
-            // Username input field
-            var inputGo = new GameObject("UsernameInput", typeof(RectTransform),
-                typeof(Image), typeof(TMP_InputField));
-            inputGo.transform.SetParent(cr, false);
-            var inputRt = inputGo.GetComponent<RectTransform>();
-            inputRt.anchorMin = inputRt.anchorMax = new Vector2(0.5f, 1f);
-            inputRt.anchoredPosition = new Vector2(0f, -80f);
-            inputRt.sizeDelta = new Vector2(480f, 55f);
-            inputGo.GetComponent<Image>().color = InputBg;
+            // Login buttons - horizontal row (BGMI style)
+            float btnY = 200f;
+            float btnSize = 90f;
+            float spacing = 130f;
+            float startX = -spacing * 1.5f;
 
-            // Input text area
-            var textArea = new GameObject("Text Area", typeof(RectTransform));
-            textArea.transform.SetParent(inputGo.transform, false);
-            var taRt = textArea.GetComponent<RectTransform>();
-            taRt.anchorMin = Vector2.zero;
-            taRt.anchorMax = Vector2.one;
-            taRt.offsetMin = new Vector2(15f, 5f);
-            taRt.offsetMax = new Vector2(-15f, -5f);
+            Button googleBtn = MakeIconButton(bottomGo.transform, "Google", "G",
+                BtnGoogle, new Vector2(startX, btnY), btnSize);
+            MakeText(bottomGo.transform, "GoogleLabel", "Google", 14,
+                TextDim, new Vector2(0.5f, 0f), new Vector2(startX, btnY - 58f));
 
-            // Input text
-            var inputText = new GameObject("Text", typeof(RectTransform));
-            inputText.transform.SetParent(textArea.transform, false);
-            var itRt = inputText.GetComponent<RectTransform>();
-            itRt.anchorMin = Vector2.zero;
-            itRt.anchorMax = Vector2.one;
-            itRt.offsetMin = Vector2.zero;
-            itRt.offsetMax = Vector2.zero;
-            var inputTmp = inputText.AddComponent<TextMeshProUGUI>();
-            inputTmp.fontSize = 28;
-            inputTmp.color = TextWhite;
-            inputTmp.alignment = TextAlignmentOptions.Left;
+            Button fbBtn = MakeIconButton(bottomGo.transform, "Facebook", "f",
+                BtnFacebook, new Vector2(startX + spacing, btnY), btnSize);
+            MakeText(bottomGo.transform, "FBLabel", "Facebook", 14,
+                TextDim, new Vector2(0.5f, 0f), new Vector2(startX + spacing, btnY - 58f));
 
-            // Placeholder
-            var placeholder = new GameObject("Placeholder", typeof(RectTransform));
-            placeholder.transform.SetParent(textArea.transform, false);
-            var phRt = placeholder.GetComponent<RectTransform>();
-            phRt.anchorMin = Vector2.zero;
-            phRt.anchorMax = Vector2.one;
-            phRt.offsetMin = Vector2.zero;
-            phRt.offsetMax = Vector2.zero;
-            var phTmp = placeholder.AddComponent<TextMeshProUGUI>();
-            phTmp.text = "Enter username...";
-            phTmp.fontSize = 28;
-            phTmp.color = TextDim;
-            phTmp.fontStyle = FontStyles.Italic;
-            phTmp.alignment = TextAlignmentOptions.Left;
+            Button twitterBtn = MakeIconButton(bottomGo.transform, "Twitter", "X",
+                BtnTwitter, new Vector2(startX + spacing * 2, btnY), btnSize);
+            MakeText(bottomGo.transform, "TwitterLabel", "Twitter", 14,
+                TextDim, new Vector2(0.5f, 0f), new Vector2(startX + spacing * 2, btnY - 58f));
 
-            // Wire input field
-            var inputField = inputGo.GetComponent<TMP_InputField>();
-            inputField.textViewport = taRt;
-            inputField.textComponent = inputTmp;
-            inputField.placeholder = phTmp;
-            inputField.characterLimit = 16;
-            inputField.contentType = TMP_InputField.ContentType.Alphanumeric;
+            Button guestBtn = MakeIconButton(bottomGo.transform, "Guest", "?",
+                BtnGuest, new Vector2(startX + spacing * 3, btnY), btnSize);
+            MakeText(bottomGo.transform, "GuestLabel", "Guest", 14,
+                TextDim, new Vector2(0.5f, 0f), new Vector2(startX + spacing * 3, btnY - 58f));
 
-            // Error text (hidden initially)
-            var errorText = MakeText(cr, "Error", "", 18,
-                BloodRed, new Vector2(0.5f, 1f), new Vector2(0f, -120f));
-            errorText.gameObject.SetActive(false);
+            // ── Loading group (shown after login) ──
+            var loadingGo = MakeGroup(m, "LoadingGroup");
+            var loadingGroup = loadingGo.GetComponent<CanvasGroup>();
+            loadingGroup.alpha = 0f;
 
-            // ── LOGIN Button (gold accent) ──
-            Button loginBtn = MakeButton(cr, "LoginButton", "LOGIN", Accent,
-                new Color(0.05f, 0.03f, 0f), new Vector2(0f, -170f), new Vector2(480f, 55f));
+            var loadingText = MakeText(loadingGo.transform, "LoadingText",
+                "Connecting...", 24, TextWhite,
+                new Vector2(0.5f, 0f), new Vector2(0f, 250f));
 
-            // ── OR divider ──
-            MakeText(cr, "OrDivider", "─────  OR  ─────", 18,
-                TextDim, new Vector2(0.5f, 1f), new Vector2(0f, -225f));
+            // Loading bar track
+            var trackGo = new GameObject("LoadingTrack", typeof(RectTransform), typeof(Image));
+            trackGo.transform.SetParent(loadingGo.transform, false);
+            var trackRt = trackGo.GetComponent<RectTransform>();
+            trackRt.anchorMin = trackRt.anchorMax = new Vector2(0.5f, 0f);
+            trackRt.anchoredPosition = new Vector2(0f, 210f);
+            trackRt.sizeDelta = new Vector2(600f, 6f);
+            trackGo.GetComponent<Image>().color = BarBg;
+            trackGo.GetComponent<Image>().raycastTarget = false;
 
-            // ── GUEST Button (green) ──
-            Button guestBtn = MakeButton(cr, "GuestButton", "PLAY AS GUEST", BtnGreen,
-                TextWhite, new Vector2(0f, -275f), new Vector2(480f, 50f));
+            // Loading bar fill
+            var fillGo = new GameObject("LoadingFill", typeof(RectTransform), typeof(Image));
+            fillGo.transform.SetParent(trackGo.transform, false);
+            Stretch(fillGo.GetComponent<RectTransform>());
+            var fillImg = fillGo.GetComponent<Image>();
+            fillImg.color = Gold;
+            fillImg.type = Image.Type.Filled;
+            fillImg.fillMethod = Image.FillMethod.Horizontal;
+            fillImg.fillOrigin = (int)Image.OriginHorizontal.Left;
+            fillImg.fillAmount = 0f;
+            fillImg.raycastTarget = false;
 
-            // ── GOOGLE Button (blue) ──
-            Button googleBtn = MakeButton(cr, "GoogleButton", "SIGN IN WITH GOOGLE",
-                BtnBlue, TextWhite, new Vector2(0f, -340f), new Vector2(480f, 50f));
+            // "Tap to continue" (hidden initially)
+            var tapText = MakeText(loadingGo.transform, "TapText",
+                "TAP TO CONTINUE", 28, Gold,
+                new Vector2(0.5f, 0f), new Vector2(0f, 250f));
+            tapText.characterSpacing = 12f;
+            tapText.gameObject.SetActive(false);
 
-            // ── Username Welcome Group (shown after login) ──
-            var usernameGo = MakeGroup(m, "UsernameGroup");
-            var usernameGroup = usernameGo.GetComponent<CanvasGroup>();
-            usernameGroup.alpha = 0f;
-
-            var welcomeText = MakeText(usernameGo.transform, "Welcome", "Welcome, Soldier!",
-                48, Accent, new Vector2(0.5f, 0.5f), new Vector2(0f, 0f));
-            welcomeText.fontStyle = FontStyles.Bold;
-
-            MakeText(usernameGo.transform, "Loading", "Deploying to island...", 24,
-                TextDim, new Vector2(0.5f, 0.5f), new Vector2(0f, -50f));
-
-            // ── Terms Group (bottom) ──
+            // ── Terms group ──
             var termsGo = MakeGroup(m, "TermsGroup");
             var termsGroup = termsGo.GetComponent<CanvasGroup>();
             termsGroup.alpha = 0f;
 
             MakeText(termsGo.transform, "Terms",
-                "By continuing you agree to our Terms of Service and Privacy Policy",
-                14, TextDim, new Vector2(0.5f, 0f), new Vector2(0f, 40f));
+                "By continuing you agree to our Terms of Service & Privacy Policy",
+                12, TextDim, new Vector2(0.5f, 0f), new Vector2(0f, 25f));
 
-            MakeText(termsGo.transform, "Version",
-                "v0.1 — EARLY ACCESS", 14, TextDim,
-                new Vector2(0.5f, 0f), new Vector2(0f, 70f));
-
-            // ── Wire LoginScreen component ──
+            // ── Wire LoginScreen ──
             var login = canvasGo.AddComponent<LoginScreen>();
             ArenaSceneBuilder.SetPrivate(login, "mainGroup", mainGroup);
-            ArenaSceneBuilder.SetPrivate(login, "titleGroup", titleGroup);
-            ArenaSceneBuilder.SetPrivate(login, "buttonsGroup", buttonsGroup);
-            ArenaSceneBuilder.SetPrivate(login, "usernameGroup", usernameGroup);
+            ArenaSceneBuilder.SetPrivate(login, "logoGroup", logoGroup);
+            ArenaSceneBuilder.SetPrivate(login, "bottomGroup", bottomGroup);
+            ArenaSceneBuilder.SetPrivate(login, "loadingGroup", loadingGroup);
             ArenaSceneBuilder.SetPrivate(login, "termsGroup", termsGroup);
-            ArenaSceneBuilder.SetPrivate(login, "usernameInput", inputField);
-            ArenaSceneBuilder.SetPrivate(login, "welcomeText", welcomeText);
-            ArenaSceneBuilder.SetPrivate(login, "errorText", errorText);
-            ArenaSceneBuilder.SetPrivate(login, "guestButton", guestBtn);
-            ArenaSceneBuilder.SetPrivate(login, "loginButton", loginBtn);
+            ArenaSceneBuilder.SetPrivate(login, "particleContainer", particleContainer);
             ArenaSceneBuilder.SetPrivate(login, "googleButton", googleBtn);
+            ArenaSceneBuilder.SetPrivate(login, "facebookButton", fbBtn);
+            ArenaSceneBuilder.SetPrivate(login, "twitterButton", twitterBtn);
+            ArenaSceneBuilder.SetPrivate(login, "guestButton", guestBtn);
+            ArenaSceneBuilder.SetPrivate(login, "loadingText", loadingText);
+            ArenaSceneBuilder.SetPrivate(login, "tapText", tapText);
+            ArenaSceneBuilder.SetPrivate(login, "loadingBar", fillImg);
             ArenaSceneBuilder.SetPrivate(login, "nextSceneName", "Island");
             ArenaSceneBuilder.SetPrivate(login, "bgmSource", bgm);
             ArenaSceneBuilder.SetPrivate(login, "sfxSource", sfx);
 
-            // Wire click sound
-            var clickClip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/SFX_Empty.wav");
+            // Click sound
+            var clickClip = AssetDatabase.LoadAssetAtPath<AudioClip>(
+                "Assets/Audio/SFX_Empty_Real.mp3");
             if (clickClip == null)
-                clickClip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/SFX_Empty_Real.mp3");
+                clickClip = AssetDatabase.LoadAssetAtPath<AudioClip>(
+                    "Assets/Audio/SFX_Empty.wav");
             if (clickClip != null)
                 ArenaSceneBuilder.SetPrivate(login, "clickClip", clickClip);
 
             // Save
             EditorSceneManager.MarkSceneDirty(scene);
             ArenaSceneBuilder.SaveSceneChecked(scene, ScenePath);
-
-            // Add to build settings after splash, before island
             ArenaSceneBuilder.AddSceneToBuildSettings(ScenePath);
 
-            Debug.Log($"<b>Login scene built.</b> Saved to {ScenePath}. " +
-                      "Update the Splash scene's next-scene to 'Login'.");
+            Debug.Log($"<b>Login scene built (BGMI style).</b> Saved to {ScenePath}.");
         }
 
-        // ── BGM: low ambient drone ──
+        // ── Background gradient ──
+        private static void BuildGradientBg(Transform parent)
+        {
+            const int h = 128;
+            var tex = new Texture2D(4, h) { wrapMode = TextureWrapMode.Clamp };
+            for (int y = 0; y < h; y++)
+            {
+                float t = Mathf.Pow(y / (float)(h - 1), 1.8f);
+                Color row = Color.Lerp(BgBot, BgTop, t);
+                for (int x = 0; x < 4; x++) tex.SetPixel(x, y, row);
+            }
+            tex.Apply();
+
+            var go = new GameObject("Background", typeof(RectTransform), typeof(RawImage));
+            go.transform.SetParent(parent, false);
+            Stretch(go.GetComponent<RectTransform>());
+            go.GetComponent<RawImage>().texture = tex;
+            go.GetComponent<RawImage>().raycastTarget = false;
+        }
+
+        // ── BGM ──
         private static AudioSource BuildBgm()
         {
             var go = new GameObject("BGM");
@@ -265,42 +288,52 @@ namespace Game.EditorTools
             src.loop = true;
             src.playOnAwake = true;
             src.spatialBlend = 0f;
-            src.volume = 0.25f;
+            src.volume = 0.3f;
 
-            var clip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/AMB_SplashBed.wav");
+            var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(
+                "Assets/Audio/AMB_SplashBed.wav");
             if (clip != null) src.clip = clip;
             return src;
         }
 
-        // ── Helpers ──
+        // ── Icon button (circular, BGMI style) ──
+        private static Button MakeIconButton(Transform parent, string name, string icon,
+            Color bgColor, Vector2 pos, float size)
+        {
+            var go = new GameObject(name + "Btn", typeof(RectTransform),
+                typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
 
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = new Vector2(size, size);
+
+            var img = go.GetComponent<Image>();
+            img.color = bgColor;
+
+            // Icon text inside
+            var iconGo = new GameObject("Icon", typeof(RectTransform));
+            iconGo.transform.SetParent(go.transform, false);
+            Stretch(iconGo.GetComponent<RectTransform>());
+            var tmp = iconGo.AddComponent<TextMeshProUGUI>();
+            tmp.text = icon;
+            tmp.fontSize = 40;
+            tmp.color = Color.white;
+            tmp.fontStyle = FontStyles.Bold;
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.raycastTarget = false;
+
+            return go.GetComponent<Button>();
+        }
+
+        // ── Helpers ──
         private static GameObject MakeGroup(Transform parent, string name)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(CanvasGroup));
             go.transform.SetParent(parent, false);
             Stretch(go.GetComponent<RectTransform>());
             return go;
-        }
-
-        private static Image MakeImage(Transform parent, string name, Color color,
-            Vector2 anchor, Vector2 pos, bool stretch)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
-            go.transform.SetParent(parent, false);
-            var rt = go.GetComponent<RectTransform>();
-            if (stretch)
-            {
-                Stretch(rt);
-            }
-            else
-            {
-                rt.anchorMin = rt.anchorMax = anchor;
-                rt.anchoredPosition = pos;
-            }
-            var img = go.GetComponent<Image>();
-            img.color = color;
-            img.raycastTarget = false;
-            return img;
         }
 
         private static TMP_Text MakeText(Transform parent, string name, string text,
@@ -319,38 +352,6 @@ namespace Game.EditorTools
             tmp.alignment = TextAlignmentOptions.Center;
             tmp.raycastTarget = false;
             return tmp;
-        }
-
-        private static Button MakeButton(Transform parent, string name, string label,
-            Color bgColor, Color textColor, Vector2 pos, Vector2 size)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
-            go.transform.SetParent(parent, false);
-            var rt = go.GetComponent<RectTransform>();
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
-            rt.anchoredPosition = pos;
-            rt.sizeDelta = size;
-            go.GetComponent<Image>().color = bgColor;
-
-            var btn = go.GetComponent<Button>();
-            var colors = btn.colors;
-            colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(1.1f, 1.1f, 1.1f);
-            colors.pressedColor = new Color(0.8f, 0.8f, 0.8f);
-            btn.colors = colors;
-
-            var textGo = new GameObject("Label", typeof(RectTransform));
-            textGo.transform.SetParent(go.transform, false);
-            Stretch(textGo.GetComponent<RectTransform>());
-            var tmp = textGo.AddComponent<TextMeshProUGUI>();
-            tmp.text = label;
-            tmp.fontSize = 24;
-            tmp.color = textColor;
-            tmp.fontStyle = FontStyles.Bold;
-            tmp.alignment = TextAlignmentOptions.Center;
-            tmp.raycastTarget = false;
-
-            return btn;
         }
 
         private static void Stretch(RectTransform rt)
