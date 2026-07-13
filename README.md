@@ -1,13 +1,13 @@
 # Gaming-Project
 
-Mobile FPS (Android + iOS) built in **Unity 6**. A wave-based jungle-island shooter:
-move, aim, shoot, slide, survive rounds against animated soldier enemies on a generated
-island, under a generated soundscape.
+**KAAL RAAT** — a mobile FPS (Android + iOS) built in **Unity 6**. A wave-based
+jungle-island shooter: move, aim, shoot, slide, survive rounds against animated soldier
+enemies on a generated island, under a generated soundscape.
 
-Everything in this repo is source. The two maps are **generated from code** (menu:
-`Game → Build Island Scene`), the weapon and ambience audio is **synthesised from code**,
-and the only binary asset is one CC0 character model (8 MB). A fresh clone plus one menu
-click produces the whole game.
+Everything in this repo is source. The maps are **generated from code** (menu:
+`Game → Build Island Scene`), every sound is **synthesised from code** — including the
+intro's ten-second score — and the only binary asset is one CC0 character model (8 MB).
+A fresh clone plus a few menu clicks produces the whole game.
 
 ---
 
@@ -43,11 +43,16 @@ git clone https://github.com/lakshaymehra-pixel/Gaming-Project.git
    HUD, NavMesh). Takes 1–3 minutes; the editor looks frozen while ~1300 props are
    placed. Let it finish. The Console should print `Jungle: Canopy — placed 340/340`
    style lines and end with `Island built.`
-3. Press **▶ Play**. Click inside the Game view once so the cursor locks.
+3. **Game → Build Splash Scene** — the intro. Build it *after* the Island, because it
+   loads the Island behind itself and needs it present in the build settings.
+4. Press **▶ Play** from the Splash scene. Click inside the Game view once so the cursor
+   locks.
 
 The audio (.wav) files are committed, so no baking is needed on a fresh clone. If you ever
 delete `Assets/Audio`, regenerate with **Game → Bake Weapon Audio** and
-**Game → Bake Jungle Ambience**, then rebuild the scene so the clips re-wire.
+**Game → Bake Jungle Ambience**, then rebuild the scenes so the clips re-wire. (The
+splash's own two clips are re-synthesised on every splash build regardless — they are
+scored to its timeline, so a stale one would drift out of sync.)
 
 > ⚠️ Scene builders refuse to run in Play mode (a dialog will tell you). Stop the game
 > first, then build.
@@ -81,6 +86,21 @@ cancels it and keeps the speed. Firing is blocked while sliding.
 ---
 
 ## What is in the game right now
+
+**Intro** — a ten-second action-horror sequence that boots first and loads the island
+behind itself. It escalates rather than repeating: a distant roar in the dark, then a
+panicked fusillade whose gaps close as it goes (0.34s between the first two shots, 0.1s
+between the last — a man firing at something he can't see doesn't pace himself), then a
+full second of silence, and the claw emblem slams into that silence from 4.2× scale with
+the roar pitched down to 0.6. The title spells itself out under a storm that is already
+running. Every visual is drawn in code — the claw, the splatter, the bullet holes are all
+generated textures — and the audio is two synthesised clips: a scored ten seconds whose
+heartbeat accelerates from 1.7s apart to under a second and whose sub-bass swell peaks
+under the slam, plus a seamless bed loop underneath so a slow scene load never drops the
+screen into silence. Tap to skip.
+
+The whole look lives in the constant block at the top of `SplashSceneBuilder`; the timing
+lives in `SplashController.Run()`.
 
 **Player** — first-person movement with acceleration, gravity, jump, sprint, and a
 capsule-shrinking slide; smoothed split yaw/pitch look; FOV that widens on sprint and
@@ -126,9 +146,11 @@ sight lines, green exponential fog (~80 m visibility), warm low sun, near-black 
 from below. Everything is generated from one seed (`Seed` in `IslandSceneBuilder`), so
 the map is reproducible.
 
-Collider rules: canopy blobs, fronds, vines and ferns have **none** (you shoot through
-leaves and walk under them); trunks, logs and boulders are solid and navigation-static
-(real cover, and the NavMesh carves around them).
+Collider rules do double duty: canopy blobs, fronds, vines and ferns have **no collider**
+(you shoot through leaves and walk under them), while trunks, logs and boulders are solid.
+That single distinction also decides navigation — the bake is a `NavMeshSurface` collecting
+physics colliders, so real cover carves the NavMesh and leaves do not, with nothing to keep
+in sync by hand.
 
 **Arena** (`Game → Build Arena Scene`) — a walled box with cover crates. Faster to iterate
 on when testing a weapon or AI change rather than the level.
@@ -156,23 +178,32 @@ on when testing a weapon or AI change rather than the level.
 
 ```
 Assets/
+  Scenes/      Splash.unity, Island.unity — generated output, committed
   Audio/       synthesised .wav clips (committed; regenerable from the Game menu)
   Models/      Swat.fbx — Quaternius, CC0 (see Models/README.md)
   Materials/   generated flat-colour materials
-  Settings/    WeaponData, terrain data, minimap RT, animator controller
+  Settings/    WeaponData, terrain data, minimap RT, animator controller,
+               splash sprites + textures (all generated)
   Scripts/
     Core/      Health, IDamageable, GameLoop, AmbienceController, ProceduralWalker
     Player/    PlayerController, PlayerMotor (slide/jump), PlayerLook, PlayerInputHub
     Weapons/   Weapon, WeaponData, WeaponAnimator, RecoilController, TracerPool
     Enemies/   EnemyAI, EnemyAnimator, WaveSpawner
-    UI/        HudController, Minimap, VirtualJoystick, TouchLookArea, HoldButton
-    Editor/    ArenaSceneBuilder, IslandSceneBuilder, IslandTerrain, JungleFoliage,
-               SoldierFactory, GunAudioBaker, AmbienceBaker   (all under the Game menu)
+    UI/        SplashController, HudController, Minimap, VirtualJoystick,
+               TouchLookArea, HoldButton
+    Editor/    ArenaSceneBuilder, IslandSceneBuilder, SplashSceneBuilder, IslandTerrain,
+               JungleFoliage, SoldierFactory, GunAudioBaker, AmbienceBaker
+               (all under the Game menu)
 ```
 
-Scenes are **not** committed — they are regenerated from the builders so the whole level
-stays reviewable as source. (`Assets/Screeen/` contains hand-saved copies from testing;
-the builders always write fresh ones to `Assets/Scenes/`.)
+`Assets/Scenes/` **is** committed, so a clone runs without building anything first. The
+builders remain the source of truth though: the scenes are generated output, and the way to
+change a level is to change its builder and re-run the menu item, not to hand-edit the
+scene and hope the next build doesn't overwrite it (it will).
+
+`Island.unity` is ~24 MB because the terrain heightfield is embedded in it. That is under
+GitHub's limits but it re-uploads in full on every terrain change — worth moving to Git LFS
+if the repo starts to drag.
 
 ---
 
@@ -203,6 +234,8 @@ Xcode. The project is kept iOS-ready so that step is mechanical when a Mac is av
 | Enemy is giant / tiny / grey / stuck in T-pose | Model import issue — delete `Assets/Settings/EnemySoldier.controller`, select `Assets/Models/Swat.fbx`, Reimport, rebuild scene. |
 | Player falls through the ground | TerrainCollider stripped → make sure `com.unity.modules.terrainphysics` is in `Packages/manifest.json` (it is, unless edited). |
 | Phone build is laggy | Lower `JungleDensity` (0.6 is a good first try), rebuild scene. |
+| Enemies stand still, Console warns "no NavMesh within 2m" | The scene has no baked surface, or the spawn points sit off it → **Game → Build Island Scene** to re-bake. An enemy that can't find the mesh disables itself rather than spamming an error every frame. |
+| Splash plays but never enters the game | The Island isn't in the build settings → build the Island scene first, then the splash (it loads the Island behind itself). |
 
 ---
 
@@ -210,7 +243,7 @@ Xcode. The project is kept iOS-ready so that step is mechanical when a Mac is av
 
 Main menu, pause, settings; weapon switching and pickups; player hands/body model;
 grenades; better enemy variety; save/highscores; multiplayer; store-ready polish
-(icons, splash, signing).
+(icons, signing).
 
 ---
 
