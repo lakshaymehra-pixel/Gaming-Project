@@ -62,7 +62,7 @@ namespace Game.EditorTools
 
             BakeNavMesh();
 
-            EditorSceneManager.SaveScene(scene, ScenePath);
+            SaveSceneChecked(scene, ScenePath);
             AddSceneToBuildSettings(ScenePath);
 
             Debug.Log($"<b>Arena built.</b> Saved to {ScenePath}. Press Play to test " +
@@ -997,9 +997,28 @@ namespace Game.EditorTools
             AssetDatabase.CreateFolder(parent, leaf);
         }
 
+        /// <summary>
+        /// Saves the scene, creating the folder first and failing LOUDLY. SaveScene
+        /// returns false without throwing when the target folder does not exist — which
+        /// once left every "built" scene silently unsaved while the console reported
+        /// success.
+        /// </summary>
+        internal static void SaveSceneChecked(Scene scene, string path)
+        {
+            EnsureFolder(System.IO.Path.GetDirectoryName(path).Replace('\\', '/'));
+
+            if (!EditorSceneManager.SaveScene(scene, path))
+                Debug.LogError($"FAILED to save scene to {path} — the scene on screen " +
+                               "is NOT on disk. Check the path and try again.");
+        }
+
         internal static void AddSceneToBuildSettings(string path)
         {
             var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+
+            // Entries pointing at files that no longer exist (moved or renamed by hand)
+            // otherwise linger forever and break scene loading by index.
+            scenes.RemoveAll(s => !System.IO.File.Exists(s.path));
 
             if (!scenes.Exists(s => s.path == path))
                 scenes.Add(new EditorBuildSettingsScene(path, true));

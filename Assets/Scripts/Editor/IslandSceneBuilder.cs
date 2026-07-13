@@ -87,7 +87,7 @@ namespace Game.EditorTools
 
             ArenaSceneBuilder.BakeNavMesh();
 
-            EditorSceneManager.SaveScene(scene, ScenePath);
+            ArenaSceneBuilder.SaveSceneChecked(scene, ScenePath);
             ArenaSceneBuilder.AddSceneToBuildSettings(ScenePath);
 
             Debug.Log($"<b>Island built.</b> Saved to {ScenePath}. Press Play to test.");

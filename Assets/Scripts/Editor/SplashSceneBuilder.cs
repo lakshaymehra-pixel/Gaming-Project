@@ -152,7 +152,7 @@ namespace Game.EditorTools
             WireClip(controller, "roarClip", "Assets/Audio/AMB_Roar.wav");
             WireClip(controller, "tickClip", "Assets/Audio/SFX_Empty.wav");
 
-            EditorSceneManager.SaveScene(scene, ScenePath);
+            ArenaSceneBuilder.SaveSceneChecked(scene, ScenePath);
             ArenaSceneBuilder.AddSceneToBuildSettings(ScenePath);
 
             Debug.Log($"<b>Splash built.</b> Saved to {ScenePath}. It boots first and " +
