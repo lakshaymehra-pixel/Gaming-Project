@@ -31,7 +31,10 @@ namespace Game.EditorTools
         private static readonly Color TextWhite = new(0.92f, 0.9f, 0.88f);
         private static readonly Color TextDim = new(0.4f, 0.38f, 0.35f);
         private static readonly Color BarBg = new(0.15f, 0.12f, 0.1f);
-        private static readonly Color BottomBar = new(0.03f, 0.025f, 0.02f, 0.9f);
+        // The strip behind the form. It has to darken the trees enough that white text on top of
+        // them is readable, and no more — at 0.9 it was a wall, and since it grew to 530px to
+        // fit the providers row it was walling off half the screen.
+        private static readonly Color BottomBar = new(0.03f, 0.025f, 0.02f, 0.62f);
 
         [MenuItem("Game/Build Login Scene")]
         public static void Build()
@@ -41,9 +44,13 @@ namespace Game.EditorTools
             Scene scene = EditorSceneManager.NewScene(
                 NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
-            // The same night jungle the splash walks into, standing still behind the login.
-            // It is the lobby: the island is already out there, waiting, while you pick a name.
-            SplashBackdrop.Stage stage = SplashBackdrop.Build();
+            // The same night jungle the splash walks into, standing still behind the login. It
+            // is the lobby: the island is already out there, waiting, while you pick a name.
+            //
+            // Lit, unlike the splash. There the darkness is the point — you are meant to be
+            // straining to see. Here it is a set you are looking at, and a set nobody can see
+            // is a set nobody built.
+            SplashBackdrop.Stage stage = SplashBackdrop.Build(lit: true);
             stage.Camera.gameObject.AddComponent<AudioListener>();
 
             // Nobody walks here — this is a held shot, not the approach. The sway in
@@ -384,7 +391,7 @@ namespace Game.EditorTools
 
             var raw = go.GetComponent<RawImage>();
             raw.texture = tex;
-            raw.color = new Color(1f, 1f, 1f, 0.66f);
+            raw.color = new Color(1f, 1f, 1f, 0.42f);
             raw.raycastTarget = false;
         }
 

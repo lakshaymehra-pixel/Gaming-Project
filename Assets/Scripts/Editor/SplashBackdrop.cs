@@ -41,12 +41,18 @@ namespace Game.EditorTools
             }
         }
 
-        internal static Stage Build()
+        /// <param name="lit">
+        /// How visible the jungle is. The splash wants it near-black — the sequence is about
+        /// what you cannot see, and the trees are there to be shapes moving past. The login
+        /// wants the same set as a lobby you are standing in, which means it has to be worth
+        /// looking at: brighter moon, thinner fog, further view.
+        /// </param>
+        internal static Stage Build(bool lit = false)
         {
             var root = new GameObject("Backdrop").transform;
             var rng = new System.Random(Seed);
 
-            BuildNight();
+            BuildNight(lit);
             BuildGround(root);
 
             JungleFoliage.Palette palette = JungleFoliage.CreatePalette();
@@ -62,31 +68,42 @@ namespace Game.EditorTools
         // ------------------------------------------------------------------- lighting
 
         /// <summary>
-        /// Night, and almost none of it. A weak moon from behind so the trees come out as
-        /// silhouettes rather than objects — you should be reading shapes, not foliage — and
-        /// fog thick enough that the jungle simply stops eight metres out. What you cannot see
-        /// is the point of the whole sequence.
+        /// Night. A cold moon from behind so the trees come out as silhouettes rather than
+        /// objects — you read shapes, not foliage — and fog that ends the jungle a few metres
+        /// out.
+        ///
+        /// The <paramref name="lit"/> version is the same night with the gain turned up: still
+        /// unmistakably dark, but you can see what you are standing in. The splash does not want
+        /// that (what you cannot see is the point of the sequence); the login does, because
+        /// there it is scenery you are looking at rather than walking through.
         /// </summary>
-        private static void BuildNight()
+        private static void BuildNight(bool lit)
         {
             var moonGo = new GameObject("Moon");
             Light moon = moonGo.AddComponent<Light>();
             moon.type = LightType.Directional;
-            moon.color = new Color(0.55f, 0.62f, 0.85f);      // cold, and dim
-            moon.intensity = 0.35f;
+            moon.color = new Color(0.55f, 0.62f, 0.85f);      // cold
+            moon.intensity = lit ? 0.95f : 0.35f;
             moon.shadows = LightShadows.Soft;
             moonGo.transform.rotation = Quaternion.Euler(18f, 200f, 0f);
 
+            float amb = lit ? 2.4f : 1f;
+
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.07f, 0.09f, 0.14f);
-            RenderSettings.ambientEquatorColor = new Color(0.04f, 0.05f, 0.07f);
-            RenderSettings.ambientGroundColor = new Color(0.01f, 0.01f, 0.02f);
+            RenderSettings.ambientSkyColor = new Color(0.07f, 0.09f, 0.14f) * amb;
+            RenderSettings.ambientEquatorColor = new Color(0.04f, 0.05f, 0.07f) * amb;
+            RenderSettings.ambientGroundColor = new Color(0.01f, 0.01f, 0.02f) * amb;
             RenderSettings.ambientIntensity = 1f;
 
             RenderSettings.fog = true;
             RenderSettings.fogColor = new Color(0.03f, 0.04f, 0.06f);
             RenderSettings.fogMode = FogMode.Exponential;
-            RenderSettings.fogDensity = 0.075f;               // the jungle ends ~8m out
+
+            // 0.075 puts the far wall of the jungle about eight metres out, which is the right
+            // distance when something is walking toward you through it. For a lobby it just
+            // deletes the set: 0.04 pushes it back to roughly twenty, so there is depth to look
+            // into rather than a green-black curtain two trees deep.
+            RenderSettings.fogDensity = lit ? 0.04f : 0.075f;
         }
 
         // --------------------------------------------------------------------- ground
