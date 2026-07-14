@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "273472432892",
+    "project_id": "game-e83bc",
+    "storage_bucket": "game-e83bc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:273472432892:android:3738c1bed37e679f604579",
+        "android_client_info": {
+          "package_name": "com.yaarigames.kaalraat"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "273472432892-gq3lt3p2n4lnfehcukt1e35o2i9v23fk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAq6kyDXV5Qrc3BCYm0KlGqK6OonSrxVxg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "273472432892-gq3lt3p2n4lnfehcukt1e35o2i9v23fk.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "273472432892-aif11adoka4277cugfkag3f6sqsvaej0.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.yaarigames.kaalraat"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
