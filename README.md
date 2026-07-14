@@ -232,6 +232,62 @@ if the repo starts to drag.
 
 ---
 
+## Login and Firebase
+
+The login screen asks for a username and password and means it — a wrong password is
+rejected, a taken name cannot be registered again. What it does *not* have out of the box is
+anywhere to check those against.
+
+**Without Firebase** (how a fresh clone runs): `AuthService` keeps accounts in `PlayerPrefs`
+on the device, with salted SHA-256 hashes. The screen says **OFFLINE MODE** so nobody
+mistakes it for the real thing. Perfectly good for playing and for demos; useless as
+security, since a player can edit their own prefs.
+
+**With Firebase**: real accounts, in the cloud, shared across devices. The code is already
+written — it sits behind `#if FIREBASE_AUTH` in
+[AuthService.cs](Assets/Scripts/Core/AuthService.cs). Nothing else in the game changes: the
+login screen only ever calls `SignIn` / `Register` / `SignInAsGuest`.
+
+### Turning Firebase on
+
+The app's package name is **`com.yaarigames.kaalraat`**. Firebase asks for it, and it must
+match exactly or the SDK will not connect.
+
+1. **Make the project** — [console.firebase.google.com](https://console.firebase.google.com)
+   → *Add project* → name it → Analytics is optional, skip it if you like. Free tier is far
+   more than this needs.
+
+2. **Turn on email sign-in** — in the project: *Build → Authentication → Get started →
+   Sign-in method → Email/Password → Enable → Save*. Nothing works until this is on.
+
+3. **Register the Android app** — *Project settings* (gear icon) → *Your apps* → the Android
+   icon. It asks three things:
+   - **Android package name**: `com.yaarigames.kaalraat` ← must be exact
+   - **App nickname**: anything, it is only a label
+   - **SHA-1**: leave blank. It is only needed for Google Sign-In, which this does not use.
+
+4. **Download `google-services.json`** and drop it in `Assets/`. It is gitignored — it ties
+   the repo to one Firebase project, and each developer downloads their own.
+
+5. **Import the SDK** — [firebase.google.com/download/unity](https://firebase.google.com/download/unity),
+   unzip, and in Unity: *Assets → Import Package → Custom Package* → `FirebaseAuth.unitypackage`.
+   Import everything it offers. It pulls in the External Dependency Manager, which will want
+   to resolve Android libraries; let it.
+
+6. **Flip the switch** — *Edit → Project Settings → Player → Android tab → Other Settings →
+   Scripting Define Symbols* → add `FIREBASE_AUTH` → press Enter, then Apply. Unity
+   recompiles, and the Firebase branch of `AuthService` comes alive.
+
+The OFFLINE MODE notice disappears on its own once it does — `AuthService.IsLive` is what the
+screen reads, and that is the define.
+
+> Firebase's Android API key ships inside every APK and is not a secret in the way a server
+> key is. It still identifies and bills *your* project, which is why `google-services.json`
+> stays out of the repo rather than sitting in a public one inviting strangers to point their
+> builds at it.
+
+---
+
 ## Building to a phone
 
 ### Android
@@ -240,6 +296,9 @@ if the repo starts to drag.
    re-imports assets, give it a few minutes).
 2. On the phone: enable Developer Options (tap Build Number 7×) → enable USB Debugging.
 3. Plug in via USB, accept the phone's prompt, then **Build And Run**.
+
+Package name is `com.yaarigames.kaalraat`, set in *Player Settings → Other Settings*. Once
+an app is on the Play Store this can never be changed, so change it now or not at all.
 
 ### iOS
 
@@ -259,6 +318,9 @@ Xcode. The project is kept iOS-ready so that step is mechanical when a Mac is av
 | Enemy is giant / tiny / grey / stuck in T-pose | Model import issue — delete `Assets/Settings/EnemySoldier.controller`, select `Assets/Models/Swat.fbx`, Reimport, rebuild scene. |
 | Player falls through the ground | TerrainCollider stripped → make sure `com.unity.modules.terrainphysics` is in `Packages/manifest.json` (it is, unless edited). |
 | Phone build is laggy | Lower `JungleDensity` (0.6 is a good first try), rebuild scene. |
+| Login still says OFFLINE MODE after the Firebase setup | `FIREBASE_AUTH` is not in *Player Settings → Other Settings → Scripting Define Symbols*, or it is set on the wrong platform tab — the symbols are per-platform, so adding it to Standalone does nothing for an Android build. |
+| Firebase compiles but every sign-in fails | Email/Password is not enabled in *Authentication → Sign-in method*, or `google-services.json` is missing from `Assets/`, or its package name does not match `com.yaarigames.kaalraat` exactly. |
+| "DllNotFoundException: FirebaseCppApp" | The SDK imported but its Android libraries were never resolved → *Assets → External Dependency Manager → Android Resolver → Force Resolve*. |
 | Enemies stand still, Console warns "no NavMesh within 2m" | The scene has no baked surface, or the spawn points sit off it → **Game → Build Island Scene** to re-bake. An enemy that can't find the mesh disables itself rather than spamming an error every frame. |
 | Splash plays but never enters the game | The Island isn't in the build settings → build the Island scene first, then the splash (it loads the Island behind itself). |
 

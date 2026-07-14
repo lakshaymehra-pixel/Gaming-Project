@@ -47,3 +47,18 @@ desktop.ini
 // Keystores — NEVER commit signing keys
 *.keystore
 *.jks
+
+// Firebase config. Ties this repo to one Firebase project and carries its API keys — the
+// Android/iOS ones are not secret in the way a server key is (they ship inside every APK),
+// but they identify and bill a specific project, and a public repo invites strangers to
+// point their builds at it. Each developer downloads their own from the Firebase console.
+[Aa]ssets/google-services.json
+[Aa]ssets/GoogleService-Info.plist
+
+// Firebase SDK — hundreds of MB of vendored binaries, and it is a download, not our source.
+[Aa]ssets/Firebase/
+[Aa]ssets/Firebase.meta
+[Aa]ssets/ExternalDependencyManager/
+[Aa]ssets/ExternalDependencyManager.meta
+[Aa]ssets/Plugins/Android/*.aar
+[Aa]ssets/Plugins/iOS/Firebase*
