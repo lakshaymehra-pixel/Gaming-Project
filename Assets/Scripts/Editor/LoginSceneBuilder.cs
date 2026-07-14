@@ -176,42 +176,77 @@ namespace Game.EditorTools
             stripRt.anchorMax = new Vector2(1f, 0f);
             stripRt.pivot = new Vector2(0.5f, 0f);
             stripRt.anchoredPosition = Vector2.zero;
-            stripRt.sizeDelta = new Vector2(0f, 340f);
+            // Tall enough for the whole ladder above — the providers row now sits at y=430, and
+            // a 340px strip left it standing on the jungle with nothing behind it.
+            stripRt.sizeDelta = new Vector2(0f, 530f);
             stripGo.GetComponent<Image>().color = BottomBar;
             stripGo.GetComponent<Image>().raycastTarget = false;
 
             // Text sizes here are in a 1920x1080 reference space, so they are roughly half what
             // they look like on a phone held at arm's length. The old 16px labels came out at
             // about 3mm tall on a handset — legible on a monitor, not on the thing this ships to.
-            MakeText(bottomGo.transform, "SelectLabel", "SIGN IN", 26,
-                TextDim, new Vector2(0.5f, 0f), new Vector2(0f, 292f));
+            // Everything below is laid out from a single ladder of Y positions rather than by
+            // hand. Hand-placed rows are how PLAY AS GUEST ended up at y=32 with the terms line
+            // at y=30, drawn straight through it.
+            const float rowSocial = 430f;   // one-tap providers, first because most people use them
+            const float rowOr = 372f;       // the "or" divider
+            const float rowUser = 322f;
+            const float rowPass = 262f;
+            const float rowError = 222f;
+            const float rowActions = 168f;  // sign in / register
+            const float rowGuest = 112f;
+            const float rowNotice = 68f;
 
-            // The form. Two fields stacked, then the actions — the shape every login on a phone
-            // already has, so nobody has to work out where to start.
+            MakeText(bottomGo.transform, "SelectLabel", "SIGN IN", 24,
+                TextDim, new Vector2(0.5f, 0f), new Vector2(0f, 486f));
+
+            // ── One-tap providers ──
+            // Real ones, not the old four buttons that all did the same nothing. Each is wired
+            // to its own provider in LoginScreen; a provider whose SDK is not installed says so
+            // when tapped rather than quietly signing the player in as a guest.
+            const float socialWidth = 200f;
+            const float socialGap = 215f;
+
+            Button googleBtn = MakeWideButton(bottomGo.transform, "Google", "GOOGLE",
+                new Color(0.85f, 0.32f, 0.25f), Color.white,
+                new Vector2(-socialGap, rowSocial), socialWidth);
+
+            Button playGamesBtn = MakeWideButton(bottomGo.transform, "PlayGames", "PLAY GAMES",
+                new Color(0.20f, 0.55f, 0.35f), Color.white,
+                new Vector2(0f, rowSocial), socialWidth);
+
+            Button facebookBtn = MakeWideButton(bottomGo.transform, "Facebook", "FACEBOOK",
+                new Color(0.23f, 0.35f, 0.60f), Color.white,
+                new Vector2(socialGap, rowSocial), socialWidth);
+
+            MakeText(bottomGo.transform, "OrLabel", "— or use a username —", 17,
+                new Color(0.35f, 0.33f, 0.30f), new Vector2(0.5f, 0f), new Vector2(0f, rowOr));
+
+            // ── Username and password ──
             TMP_InputField userField = MakeInput(bottomGo.transform, "UsernameField",
-                "USERNAME", new Vector2(0f, 238f), password: false);
+                "USERNAME", new Vector2(0f, rowUser), password: false);
 
             TMP_InputField passField = MakeInput(bottomGo.transform, "PasswordField",
-                "PASSWORD", new Vector2(0f, 178f), password: true);
+                "PASSWORD", new Vector2(0f, rowPass), password: true);
 
-            // Rejections land here, between the fields and the buttons, where the eye already is.
+            // Rejections land between the fields and the buttons, where the eye already is.
             TMP_Text errorText = MakeText(bottomGo.transform, "ErrorText", "", 20,
-                new Color(0.95f, 0.3f, 0.25f), new Vector2(0.5f, 0f), new Vector2(0f, 138f));
+                new Color(0.95f, 0.3f, 0.25f), new Vector2(0.5f, 0f), new Vector2(0f, rowError));
 
             Button signInBtn = MakeWideButton(bottomGo.transform, "SignIn", "SIGN IN",
-                Gold, new Color(0.06f, 0.05f, 0.04f), new Vector2(-165f, 88f), 300f);
+                Gold, new Color(0.06f, 0.05f, 0.04f), new Vector2(-165f, rowActions), 300f);
 
             Button registerBtn = MakeWideButton(bottomGo.transform, "Register", "REGISTER",
-                new Color(0.22f, 0.20f, 0.18f), TextWhite, new Vector2(165f, 88f), 300f);
+                new Color(0.22f, 0.20f, 0.18f), TextWhite, new Vector2(165f, rowActions), 300f);
 
             Button guestBtn = MakeWideButton(bottomGo.transform, "Guest", "PLAY AS GUEST",
-                new Color(0.14f, 0.13f, 0.12f), TextDim, new Vector2(0f, 32f), 630f);
+                new Color(0.14f, 0.13f, 0.12f), TextDim, new Vector2(0f, rowGuest), 630f);
 
-            // Says out loud that there is no server behind this yet. LoginScreen hides it the
-            // moment there is one.
+            // Says out loud when there is no server behind this. LoginScreen hides it once
+            // there is one.
             TMP_Text offlineNotice = MakeText(bottomGo.transform, "OfflineNotice",
                 "OFFLINE MODE", 16, new Color(0.55f, 0.45f, 0.2f),
-                new Vector2(0.5f, 0f), new Vector2(0f, -8f));
+                new Vector2(0.5f, 0f), new Vector2(0f, rowNotice));
 
             // ── Loading group (shown after login) ──
             var loadingGo = MakeGroup(m, "LoadingGroup");
@@ -274,9 +309,11 @@ namespace Game.EditorTools
             var termsGroup = termsGo.GetComponent<CanvasGroup>();
             termsGroup.alpha = 0f;
 
+            // Below the offline notice at y=68, not on top of it. This line and PLAY AS GUEST
+            // were two pixels apart and drawing through each other.
             MakeText(termsGo.transform, "Terms",
                 "By continuing you agree to our Terms of Service & Privacy Policy",
-                18, TextDim, new Vector2(0.5f, 0f), new Vector2(0f, 30f));
+                16, TextDim, new Vector2(0.5f, 0f), new Vector2(0f, 28f));
 
             // ── Wire LoginScreen ──
             var login = canvasGo.AddComponent<LoginScreen>();
@@ -286,6 +323,9 @@ namespace Game.EditorTools
             ArenaSceneBuilder.SetPrivate(login, "loadingGroup", loadingGroup);
             ArenaSceneBuilder.SetPrivate(login, "termsGroup", termsGroup);
             ArenaSceneBuilder.SetPrivate(login, "particleContainer", particleContainer);
+            ArenaSceneBuilder.SetPrivate(login, "googleButton", googleBtn);
+            ArenaSceneBuilder.SetPrivate(login, "playGamesButton", playGamesBtn);
+            ArenaSceneBuilder.SetPrivate(login, "facebookButton", facebookBtn);
             ArenaSceneBuilder.SetPrivate(login, "usernameField", userField);
             ArenaSceneBuilder.SetPrivate(login, "passwordField", passField);
             ArenaSceneBuilder.SetPrivate(login, "signInButton", signInBtn);

@@ -28,6 +28,11 @@ namespace Game.UI
         [Header("Particles")]
         [SerializeField] private RectTransform particleContainer;
 
+        [Header("One-tap providers")]
+        [SerializeField] private Button googleButton;
+        [SerializeField] private Button playGamesButton;
+        [SerializeField] private Button facebookButton;
+
         [Header("Sign in")]
         [SerializeField] private TMP_InputField usernameField;
         [SerializeField] private TMP_InputField passwordField;
@@ -90,6 +95,10 @@ namespace Game.UI
             if (signInButton != null) signInButton.onClick.AddListener(OnSignIn);
             if (registerButton != null) registerButton.onClick.AddListener(OnRegister);
             if (guestButton != null) guestButton.onClick.AddListener(OnGuest);
+
+            WireProvider(googleButton, Game.Core.AuthService.Provider.Google);
+            WireProvider(playGamesButton, Game.Core.AuthService.Provider.PlayGames);
+            WireProvider(facebookButton, Game.Core.AuthService.Provider.Facebook);
 
             if (errorText != null) errorText.text = "";
 
@@ -169,6 +178,29 @@ namespace Game.UI
 
         // ────────────────────── Login ──────────────────────
 
+        /// <summary>
+        /// Hooks a provider button up, and dims it if that provider has no SDK behind it. It
+        /// stays tappable on purpose: a greyed-out dead button tells you nothing, and this one
+        /// answers with the actual reason it cannot be used.
+        /// </summary>
+        private void WireProvider(Button button, Game.Core.AuthService.Provider provider)
+        {
+            if (button == null) return;
+
+            button.onClick.AddListener(() => Attempt(
+                done => Game.Core.AuthService.SignInWith(provider, done), provider.ToString()));
+
+            if (Game.Core.AuthService.IsAvailable(provider)) return;
+
+            var image = button.GetComponent<Image>();
+            if (image != null)
+                image.color = new Color(image.color.r, image.color.g, image.color.b, 0.35f);
+
+            var label = button.GetComponentInChildren<TMP_Text>();
+            if (label != null)
+                label.color = new Color(label.color.r, label.color.g, label.color.b, 0.5f);
+        }
+
         private void OnSignIn() => Attempt(done =>
             Game.Core.AuthService.SignIn(Username, Password, done), "Password");
 
@@ -232,6 +264,9 @@ namespace Game.UI
             if (signInButton != null) signInButton.interactable = on;
             if (registerButton != null) registerButton.interactable = on;
             if (guestButton != null) guestButton.interactable = on;
+            if (googleButton != null) googleButton.interactable = on;
+            if (playGamesButton != null) playGamesButton.interactable = on;
+            if (facebookButton != null) facebookButton.interactable = on;
         }
 
         private IEnumerator LoginSequence(string method, string playerName)
