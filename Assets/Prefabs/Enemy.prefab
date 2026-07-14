@@ -1495,6 +1495,7 @@ MonoBehaviour:
   audioSource: {fileID: 3354223558390914534}
   fireClip: {fileID: 8300000, guid: ac810e1bf3e85584db1eca530c386ad7, type: 3}
   despawnDelay: 4
+  navMeshSnapRadius: 2
 --- !u!1 &3561439564155420073
 GameObject:
   m_ObjectHideFlags: 0

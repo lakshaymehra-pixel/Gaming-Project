@@ -131,7 +131,7 @@ namespace Game.EditorTools
         /// roots on the big ones. The lean and the asymmetric canopy are what stop a hundred
         /// of these reading as a hundred copies of one tree.
         /// </summary>
-        private static GameObject MakeTree(Palette p, System.Random rng,
+        internal static GameObject MakeTree(Palette p, System.Random rng,
                                            float minHeight, float maxHeight,
                                            float canopyScale, bool buttressRoots)
         {
@@ -232,7 +232,7 @@ namespace Game.EditorTools
         }
 
         /// <summary>Palm: a bare curving trunk with fronds fanning off the top.</summary>
-        private static GameObject MakePalm(Palette p, System.Random rng)
+        internal static GameObject MakePalm(Palette p, System.Random rng)
         {
             var root = new GameObject("Palm");
 
@@ -302,7 +302,7 @@ namespace Game.EditorTools
         /// Undergrowth: ferns and bushes. These have no colliders — a forest floor you have
         /// to walk around is a forest floor you cannot fight in.
         /// </summary>
-        private static GameObject MakeGroundCover(Palette p, System.Random rng)
+        internal static GameObject MakeGroundCover(Palette p, System.Random rng)
         {
             var root = new GameObject("Cover");
             bool isFern = rng.NextDouble() > 0.45;

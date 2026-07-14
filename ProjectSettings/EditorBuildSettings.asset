@@ -9,6 +9,12 @@ EditorBuildSettings:
     path: Assets/Scenes/Splash.unity
     guid: bc62544672bdfe04ea5bfab296392bfb
   - enabled: 1
+    path: Assets/Scenes/Login.unity
+    guid: 569a6e3c7c9b4744eb1a22731959b554
+  - enabled: 1
     path: Assets/Scenes/Island.unity
     guid: 949f8c5bb2309de4ba14398a69a3d17a
+  - enabled: 1
+    path: Assets/Scenes/Arena.unity
+    guid: 3852762dfca9f9b4a89f99d779fbe0a2
   m_configObjects: {}

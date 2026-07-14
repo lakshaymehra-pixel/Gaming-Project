@@ -66,11 +66,10 @@ namespace Game.EditorTools
             Scene scene = EditorSceneManager.NewScene(
                 NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
-            var camGo = new GameObject("Camera");
-            var cam = camGo.AddComponent<Camera>();
-            cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = Color.black;
-            camGo.AddComponent<AudioListener>();
+            // The backdrop brings its own camera: the intro looks down a corridor of night
+            // jungle with a man walking away up it, rather than at a flat colour.
+            SplashBackdrop.Stage stage = SplashBackdrop.Build();
+            stage.Camera.gameObject.AddComponent<AudioListener>();
 
             AudioSource drone = BuildDroneSource();
             AudioSource bed = BuildBedSource();
@@ -166,6 +165,10 @@ namespace Game.EditorTools
             ArenaSceneBuilder.SetPrivate(controller, "droneSource", drone);
             ArenaSceneBuilder.SetPrivate(controller, "bedSource", bed);
             SetObjectArray(controller, "jungleSources", jungle);
+
+            ArenaSceneBuilder.SetPrivate(controller, "backdropCamera", stage.Camera);
+            if (stage.Soldier != null)
+                ArenaSceneBuilder.SetPrivate(controller, "backdropSoldier", stage.Soldier);
             ArenaSceneBuilder.SetPrivate(controller, "nextSceneName", "Login");
             ArenaSceneBuilder.SetPrivate(controller, "ageWarningGroup", ageWarning);
             ArenaSceneBuilder.SetPrivate(controller, "studioGroup", studio);
@@ -251,12 +254,22 @@ namespace Game.EditorTools
 
         // ------------------------------------------------------------------ backdrop
 
+        /// <summary>
+        /// A scrim, not a background. There is a live jungle behind this canvas now, and the
+        /// old opaque gradient would simply hide it — but bone-white text over moving foliage
+        /// is unreadable, so the gradient stays and goes translucent instead: enough to sit the
+        /// title on, thin enough to see the trees through.
+        /// </summary>
         private static void BuildBackground(Transform parent)
         {
-            var go = new GameObject("Background", typeof(RectTransform), typeof(RawImage));
+            var go = new GameObject("Scrim", typeof(RectTransform), typeof(RawImage));
             go.transform.SetParent(parent, false);
             Stretch(go.GetComponent<RectTransform>());
-            go.GetComponent<RawImage>().texture = MakeGradientTexture();
+
+            var raw = go.GetComponent<RawImage>();
+            raw.texture = MakeGradientTexture();
+            raw.color = new Color(1f, 1f, 1f, 0.62f);
+            raw.raycastTarget = false;
         }
 
         private static Texture2D MakeGradientTexture()
@@ -868,11 +881,16 @@ namespace Game.EditorTools
             var group = go.GetComponent<CanvasGroup>();
             group.alpha = 0f;   // starts hidden
 
-            // Dark backdrop so it covers the gradient background cleanly
+            // Darkens the card's background without blacking it out. At 0.95 alpha this was an
+            // opaque curtain over the whole screen for the ten seconds these three cards take —
+            // which is the entire life of the jungle behind them. The camera walked its route
+            // and the soldier walked out of frame, all of it unseen. At 0.72 the card still
+            // reads and the trees are still there behind it, out of focus in the dark, which is
+            // the point of having built them.
             var bgGo = new GameObject("BgmiDark", typeof(RectTransform), typeof(Image));
             bgGo.transform.SetParent(go.transform, false);
             Stretch(bgGo.GetComponent<RectTransform>());
-            bgGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.95f);
+            bgGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.72f);
             bgGo.GetComponent<Image>().raycastTarget = false;
 
             // Icon above text (e.g. warning symbol)

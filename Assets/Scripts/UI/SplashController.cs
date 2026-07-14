@@ -67,6 +67,14 @@ namespace Game.UI
                  "something big is close — that silence is what tells you it is.")]
         [SerializeField] private float jungleHushed = 0.06f;
 
+        [Header("Backdrop")]
+        [Tooltip("The camera walking into the jungle behind the UI. Optional — without it the " +
+                 "intro still runs, just against a flat background.")]
+        [SerializeField] private SplashCamera backdropCamera;
+
+        [Tooltip("The soldier ahead in the trees. He stops and turns when the creature roars.")]
+        [SerializeField] private SplashSoldier backdropSoldier;
+
         [Header("Next scene")]
         [SerializeField] private string nextSceneName = "Island";
 
@@ -189,9 +197,15 @@ namespace Game.UI
             // HORROR PHASE: The original KAAL RAAT sequence begins
             // ═══════════════════════════════════════════════════════════
 
-            // ---- 0.0s  Darkness — but not silence. The island is already there: night
-            // jungle, birds and insects, the ordinary sound of a place with nothing wrong
-            // with it. Everything after this is that sound being taken away.
+            // ---- 0.0s  The cards are off. The walk starts here, not on Awake: the camera
+            // covers its whole route in the time those three cards take, and a walk spent
+            // behind them arrives at the roar already finished.
+            if (backdropCamera != null) backdropCamera.Begin();
+            if (backdropSoldier != null) backdropSoldier.Begin();
+
+            // Darkness — but not silence. The island is already there: night jungle, birds and
+            // insects, the ordinary sound of a place with nothing wrong with it. Everything
+            // after this is that sound being taken away.
             yield return WaitOrSkip(0.7f);
 
             // ---- 0.7s  Something out there, still far off. Low and slow.
@@ -207,6 +221,15 @@ namespace Game.UI
             // ---- 1.55s  It answers itself, closer. Louder. Angrier.
             PlayOneShot(roarClip, 0.7f, 0.65f);
             _shakeAmplitude = 12f;
+
+            // The walk stops. Not a cut — a man slowing because he has understood something,
+            // and the stillness that follows is worse than the movement was.
+            if (backdropCamera != null) backdropCamera.Halt(0.5f);
+
+            // The soldier ahead hears it too. He turns back toward it, which is toward you.
+            if (backdropSoldier != null && backdropCamera != null)
+                backdropSoldier.Alert(backdropCamera.transform);
+
             yield return WaitOrSkip(0.3f);
 
             // ---- A third roar, very close — the creature is HERE
@@ -410,6 +433,10 @@ namespace Game.UI
 
             if (clip != null) PlayOneShot(clip, volume, Random.Range(0.94f, 1.06f));
 
+            // The man in the trees is the one firing. Driving his animation from here rather
+            // than on his own timer is what keeps the muzzle and the report the same event.
+            if (backdropSoldier != null) backdropSoldier.Fire();
+
             Flash(0.6f, 0.075f);
             _shakeAmplitude = Mathf.Max(_shakeAmplitude, shake);
         }
@@ -425,6 +452,10 @@ namespace Game.UI
             PlayOneShot(roarClip, 1f, 0.5f);   // deeper pitch = bigger creature
             Flash(1f, 0.28f);                   // brighter flash
             _shakeAmplitude = 60f;              // harder shake
+
+            // The world flinches too. The UI shake is a 2D rattle of the canvas; without this
+            // the claws land on a picture of a jungle rather than in one.
+            if (backdropCamera != null) backdropCamera.Recoil(0.9f);
 
             const float duration = 0.34f;
             float t = 0f;
