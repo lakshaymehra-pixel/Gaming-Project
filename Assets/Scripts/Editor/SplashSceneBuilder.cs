@@ -94,8 +94,10 @@ namespace Game.EditorTools
             BuildBackground(c);
 
             // ── BGMI-style intro groups (shown before the horror sequence) ──
+            // "!" and not "⚠": LiberationSans has no warning-sign glyph, and TMP silently
+            // substitutes the missing-glyph box — so the card opened on an empty rectangle.
             CanvasGroup ageWarning = BuildBgmiGroup(c, "AgeWarning", AgeWarning, 28,
-                new Color(0.9f, 0.2f, 0.15f), DimText, "⚠", 60);
+                new Color(0.9f, 0.2f, 0.15f), DimText, "!", 72);
             CanvasGroup poweredBy = BuildBgmiGroup(c, "PoweredBy", PoweredBy, 32,
                 new Color(0.6f, 0.6f, 0.6f), default, null, 0);
             CanvasGroup studio = BuildBgmiGroup(c, "Studio", StudioName, 80,

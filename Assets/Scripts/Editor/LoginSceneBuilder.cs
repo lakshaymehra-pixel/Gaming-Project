@@ -137,9 +137,20 @@ namespace Game.EditorTools
             lineL.GetComponent<Image>().color = new Color(Gold.r, Gold.g, Gold.b, 0.5f);
             lineL.GetComponent<Image>().raycastTarget = false;
 
-            // Diamond/dot in center
-            var diamond = MakeText(logoGo.transform, "Diamond", "◆", 16,
-                Gold, new Vector2(0.5f, 0.6f), new Vector2(0f, -220f));
+            // The diamond between the two rules. A square turned 45°, not the "◆" character —
+            // LiberationSans has no glyph for it, so TMP was substituting the missing-glyph box
+            // and drawing a small hollow rectangle in the middle of the logo.
+            var diamond = new GameObject("Diamond", typeof(RectTransform), typeof(Image));
+            diamond.transform.SetParent(logoGo.transform, false);
+
+            var diamondRt = diamond.GetComponent<RectTransform>();
+            diamondRt.anchorMin = diamondRt.anchorMax = new Vector2(0.5f, 0.6f);
+            diamondRt.anchoredPosition = new Vector2(0f, -220f);
+            diamondRt.sizeDelta = new Vector2(9f, 9f);
+            diamondRt.localRotation = Quaternion.Euler(0f, 0f, 45f);
+
+            diamond.GetComponent<Image>().color = Gold;
+            diamond.GetComponent<Image>().raycastTarget = false;
 
             // Gold line separator (right)
             var lineR = new GameObject("GoldLineR", typeof(RectTransform), typeof(Image));
