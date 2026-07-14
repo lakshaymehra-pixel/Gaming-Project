@@ -183,71 +183,56 @@ namespace Game.EditorTools
             stripRt.anchorMax = new Vector2(1f, 0f);
             stripRt.pivot = new Vector2(0.5f, 0f);
             stripRt.anchoredPosition = Vector2.zero;
-            // Tall enough for the whole ladder above — the providers row now sits at y=430, and
-            // a 340px strip left it standing on the jungle with nothing behind it.
-            stripRt.sizeDelta = new Vector2(0f, 530f);
+            stripRt.sizeDelta = new Vector2(0f, 400f);
             stripGo.GetComponent<Image>().color = BottomBar;
             stripGo.GetComponent<Image>().raycastTarget = false;
 
-            // Text sizes here are in a 1920x1080 reference space, so they are roughly half what
-            // they look like on a phone held at arm's length. The old 16px labels came out at
-            // about 3mm tall on a handset — legible on a monitor, not on the thing this ships to.
-            // Everything below is laid out from a single ladder of Y positions rather than by
-            // hand. Hand-placed rows are how PLAY AS GUEST ended up at y=32 with the terms line
-            // at y=30, drawn straight through it.
-            const float rowSocial = 430f;   // one-tap providers, first because most people use them
-            const float rowOr = 372f;       // the "or" divider
-            const float rowUser = 322f;
-            const float rowPass = 262f;
-            const float rowError = 222f;
-            const float rowActions = 168f;  // sign in / register
-            const float rowGuest = 112f;
-            const float rowNotice = 68f;
+            // Rows come off one ladder rather than being placed by hand — hand-placed rows are
+            // how PLAY AS GUEST once ended up at y=32 with the terms line at y=30, drawn
+            // straight through it.
+            //
+            // Sizes are in a 1920x1080 reference space, so they read about half this big on a
+            // phone at arm's length.
+            const float rowLabel = 340f;
+            const float rowSocial = 258f;   // one tap, three providers
+            const float rowGuest = 158f;
+            const float rowError = 104f;
+            const float rowNotice = 66f;
 
-            MakeText(bottomGo.transform, "SelectLabel", "SIGN IN", 24,
-                TextDim, new Vector2(0.5f, 0f), new Vector2(0f, 486f));
+            MakeText(bottomGo.transform, "SelectLabel", "SIGN IN TO PLAY", 24,
+                TextDim, new Vector2(0.5f, 0f), new Vector2(0f, rowLabel));
 
             // ── One-tap providers ──
-            // Real ones, not the old four buttons that all did the same nothing. Each is wired
-            // to its own provider in LoginScreen; a provider whose SDK is not installed says so
-            // when tapped rather than quietly signing the player in as a guest.
-            const float socialWidth = 200f;
-            const float socialGap = 215f;
+            // Each is wired to its own provider in LoginScreen. One whose SDK is not installed
+            // says so when tapped, rather than quietly signing the player in as a guest.
+            const float socialWidth = 290f;
+            const float socialGap = 305f;
+            const float socialHeight = 62f;
 
             Button googleBtn = MakeWideButton(bottomGo.transform, "Google", "GOOGLE",
                 new Color(0.85f, 0.32f, 0.25f), Color.white,
-                new Vector2(-socialGap, rowSocial), socialWidth);
+                new Vector2(-socialGap, rowSocial), socialWidth, socialHeight);
 
             Button playGamesBtn = MakeWideButton(bottomGo.transform, "PlayGames", "PLAY GAMES",
                 new Color(0.20f, 0.55f, 0.35f), Color.white,
-                new Vector2(0f, rowSocial), socialWidth);
+                new Vector2(0f, rowSocial), socialWidth, socialHeight);
 
             Button facebookBtn = MakeWideButton(bottomGo.transform, "Facebook", "FACEBOOK",
                 new Color(0.23f, 0.35f, 0.60f), Color.white,
-                new Vector2(socialGap, rowSocial), socialWidth);
+                new Vector2(socialGap, rowSocial), socialWidth, socialHeight);
 
-            MakeText(bottomGo.transform, "OrLabel", "— or use a username —", 17,
-                new Color(0.35f, 0.33f, 0.30f), new Vector2(0.5f, 0f), new Vector2(0f, rowOr));
-
-            // ── Username and password ──
-            TMP_InputField userField = MakeInput(bottomGo.transform, "UsernameField",
-                "USERNAME", new Vector2(0f, rowUser), password: false);
-
-            TMP_InputField passField = MakeInput(bottomGo.transform, "PasswordField",
-                "PASSWORD", new Vector2(0f, rowPass), password: true);
-
-            // Rejections land between the fields and the buttons, where the eye already is.
-            TMP_Text errorText = MakeText(bottomGo.transform, "ErrorText", "", 20,
-                new Color(0.95f, 0.3f, 0.25f), new Vector2(0.5f, 0f), new Vector2(0f, rowError));
-
-            Button signInBtn = MakeWideButton(bottomGo.transform, "SignIn", "SIGN IN",
-                Gold, new Color(0.06f, 0.05f, 0.04f), new Vector2(-165f, rowActions), 300f);
-
-            Button registerBtn = MakeWideButton(bottomGo.transform, "Register", "REGISTER",
-                new Color(0.22f, 0.20f, 0.18f), TextWhite, new Vector2(165f, rowActions), 300f);
-
+            // Guest sits apart and reads quieter. It is the way in for anyone who does not want
+            // an account, not the way in the game would prefer — guest progress lives on one
+            // phone and dies with it.
             Button guestBtn = MakeWideButton(bottomGo.transform, "Guest", "PLAY AS GUEST",
-                new Color(0.14f, 0.13f, 0.12f), TextDim, new Vector2(0f, rowGuest), 630f);
+                new Color(0.14f, 0.13f, 0.12f), TextDim,
+                new Vector2(0f, rowGuest), 630f, 52f);
+
+            // A rejected provider explains itself here.
+            TMP_Text errorText = MakeText(bottomGo.transform, "ErrorText", "", 19,
+                new Color(0.95f, 0.4f, 0.3f), new Vector2(0.5f, 0f), new Vector2(0f, rowError));
+            errorText.rectTransform.sizeDelta = new Vector2(1000f, 60f);
+            errorText.enableWordWrapping = true;
 
             // Says out loud when there is no server behind this. LoginScreen hides it once
             // there is one.
@@ -333,10 +318,6 @@ namespace Game.EditorTools
             ArenaSceneBuilder.SetPrivate(login, "googleButton", googleBtn);
             ArenaSceneBuilder.SetPrivate(login, "playGamesButton", playGamesBtn);
             ArenaSceneBuilder.SetPrivate(login, "facebookButton", facebookBtn);
-            ArenaSceneBuilder.SetPrivate(login, "usernameField", userField);
-            ArenaSceneBuilder.SetPrivate(login, "passwordField", passField);
-            ArenaSceneBuilder.SetPrivate(login, "signInButton", signInBtn);
-            ArenaSceneBuilder.SetPrivate(login, "registerButton", registerBtn);
             ArenaSceneBuilder.SetPrivate(login, "guestButton", guestBtn);
             ArenaSceneBuilder.SetPrivate(login, "errorText", errorText);
             ArenaSceneBuilder.SetPrivate(login, "offlineNotice", offlineNotice);
@@ -411,86 +392,9 @@ namespace Game.EditorTools
             return src;
         }
 
-        // ── Icon button with glow border (BGMI style) ──
-        /// <summary>
-        /// A text field with a placeholder. TMP_InputField needs three pieces wired by hand —
-        /// the text component, the placeholder, and a viewport to clip against — and it fails
-        /// silently and confusingly if any of them is missing.
-        /// </summary>
-        private static TMP_InputField MakeInput(Transform parent, string name,
-            string placeholder, Vector2 pos, bool password)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image),
-                                    typeof(TMP_InputField));
-            go.transform.SetParent(parent, false);
-
-            var rt = go.GetComponent<RectTransform>();
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
-            rt.anchoredPosition = pos;
-            rt.sizeDelta = new Vector2(630f, 52f);
-
-            go.GetComponent<Image>().color = new Color(0.10f, 0.09f, 0.08f, 0.95f);
-
-            // The text area, inset so the caret never touches the edge of the box.
-            var areaGo = new GameObject("TextArea", typeof(RectTransform), typeof(RectMask2D));
-            areaGo.transform.SetParent(go.transform, false);
-            var areaRt = areaGo.GetComponent<RectTransform>();
-            areaRt.anchorMin = Vector2.zero;
-            areaRt.anchorMax = Vector2.one;
-            areaRt.offsetMin = new Vector2(18f, 2f);
-            areaRt.offsetMax = new Vector2(-18f, -2f);
-
-            TMP_Text text = MakeFieldText(areaGo.transform, "Text", "", TextWhite);
-            TMP_Text hint = MakeFieldText(areaGo.transform, "Placeholder", placeholder,
-                                          new Color(0.42f, 0.39f, 0.36f));
-            hint.fontStyle = FontStyles.Italic;
-
-            var input = go.GetComponent<TMP_InputField>();
-            input.textViewport = areaRt;
-            input.textComponent = text;
-            input.placeholder = hint;
-            input.fontAsset = text.font;
-            input.pointSize = 24f;
-            input.caretColor = Gold;
-            input.selectionColor = new Color(Gold.r, Gold.g, Gold.b, 0.3f);
-            input.characterLimit = 24;
-
-            if (password)
-            {
-                input.contentType = TMP_InputField.ContentType.Password;
-                input.asteriskChar = '*';
-            }
-            else
-            {
-                // Not Standard: usernames go into an email on the Firebase path, and a name with
-                // a space in it makes an address that will not resolve.
-                input.contentType = TMP_InputField.ContentType.Alphanumeric;
-            }
-
-            return input;
-        }
-
-        private static TMP_Text MakeFieldText(Transform parent, string name, string content,
-                                              Color color)
-        {
-            var go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(parent, false);
-            Stretch(go.GetComponent<RectTransform>());
-
-            var tmp = go.AddComponent<TextMeshProUGUI>();
-            tmp.text = content;
-            tmp.fontSize = 24f;
-            tmp.color = color;
-            tmp.alignment = TextAlignmentOptions.Left;
-            tmp.verticalAlignment = VerticalAlignmentOptions.Middle;
-            tmp.raycastTarget = false;
-
-            return tmp;
-        }
-
-        /// <summary>A full-width action button with a label — sign in, register, guest.</summary>
+        /// <summary>A labelled action button — a provider, or guest.</summary>
         private static Button MakeWideButton(Transform parent, string name, string label,
-            Color bgColor, Color textColor, Vector2 pos, float width)
+            Color bgColor, Color textColor, Vector2 pos, float width, float height = 48f)
         {
             var go = new GameObject(name + "Btn", typeof(RectTransform),
                                     typeof(Image), typeof(Button));
@@ -499,7 +403,7 @@ namespace Game.EditorTools
             var rt = go.GetComponent<RectTransform>();
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
             rt.anchoredPosition = pos;
-            rt.sizeDelta = new Vector2(width, 48f);
+            rt.sizeDelta = new Vector2(width, height);
 
             go.GetComponent<Image>().color = bgColor;
 
@@ -514,7 +418,7 @@ namespace Game.EditorTools
                                 new Vector2(0.5f, 0.5f), Vector2.zero);
             text.fontStyle = FontStyles.Bold;
             text.characterSpacing = 6f;
-            text.rectTransform.sizeDelta = new Vector2(width, 48f);
+            text.rectTransform.sizeDelta = new Vector2(width, height);
 
             return btn;
         }

@@ -34,10 +34,6 @@ namespace Game.UI
         [SerializeField] private Button facebookButton;
 
         [Header("Sign in")]
-        [SerializeField] private TMP_InputField usernameField;
-        [SerializeField] private TMP_InputField passwordField;
-        [SerializeField] private Button signInButton;
-        [SerializeField] private Button registerButton;
         [SerializeField] private Button guestButton;
 
         [Tooltip("Where a rejected login says why.")]
@@ -92,8 +88,6 @@ namespace Game.UI
             CreateParticles();
             StartCoroutine(IntroSequence());
 
-            if (signInButton != null) signInButton.onClick.AddListener(OnSignIn);
-            if (registerButton != null) registerButton.onClick.AddListener(OnRegister);
             if (guestButton != null) guestButton.onClick.AddListener(OnGuest);
 
             WireProvider(googleButton, Game.Core.AuthService.Provider.Google);
@@ -110,10 +104,6 @@ namespace Game.UI
                 offlineNotice.gameObject.SetActive(!Game.Core.AuthService.IsLive);
                 offlineNotice.text = "OFFLINE MODE — accounts are stored on this device only";
             }
-
-            // Come back to the name they used last. Only the name; never the password.
-            if (usernameField != null)
-                usernameField.text = PlayerPrefs.GetString("PlayerName", "");
         }
 
         private void Update()
@@ -201,23 +191,13 @@ namespace Game.UI
                 label.color = new Color(label.color.r, label.color.g, label.color.b, 0.5f);
         }
 
-        private void OnSignIn() => Attempt(done =>
-            Game.Core.AuthService.SignIn(Username, Password, done), "Password");
-
-        private void OnRegister() => Attempt(done =>
-            Game.Core.AuthService.Register(Username, Password, done), "Password");
-
         private void OnGuest() => Attempt(
             Game.Core.AuthService.SignInAsGuest, "Guest");
 
-        private string Username => usernameField != null ? usernameField.text.Trim() : "";
-        private string Password => passwordField != null ? passwordField.text : "";
-
         /// <summary>
         /// Runs an auth attempt and, only if it succeeds, hands off to the loading sequence. A
-        /// rejection puts the reason on screen and leaves the player exactly where they were,
-        /// with what they typed still in the fields — retyping a username because the password
-        /// was wrong is the kind of thing that makes people close a game.
+        /// rejection puts the reason on screen and leaves the player where they were, free to
+        /// try a different button.
         /// </summary>
         private void Attempt(System.Func<System.Action<Game.Core.AuthService.Result>, IEnumerator>
                              attempt, string method)
@@ -259,10 +239,6 @@ namespace Game.UI
         /// a second one on top of the first.</summary>
         private void SetInteractable(bool on)
         {
-            if (usernameField != null) usernameField.interactable = on;
-            if (passwordField != null) passwordField.interactable = on;
-            if (signInButton != null) signInButton.interactable = on;
-            if (registerButton != null) registerButton.interactable = on;
             if (guestButton != null) guestButton.interactable = on;
             if (googleButton != null) googleButton.interactable = on;
             if (playGamesButton != null) playGamesButton.interactable = on;
