@@ -628,11 +628,50 @@ namespace Game.EditorTools
             SetPrivate(loop, "player", player);
             SetPrivate(loop, "spawner", spawner);
             SetPrivate(loop, "playerSpawnPoint", playerSpawn);
-            SetPrivate(loop, "respawnOnDeath", true);
+
+            // One life. Respawning forever meant a match never ended, which meant no game over,
+            // no score to bank, and nothing for the lobby to show — a run with no stakes and no
+            // record of it. Dying now ends the round, and the round is what the profile is made
+            // of.
+            SetPrivate(loop, "respawnOnDeath", false);
+
             SetPrivate(loop, "respawnDelay", 3f);
             SetPrivate(loop, "pointsPerKill", 100);
+            SetPrivate(loop, "lobbyScene", "Lobby");
+            SetPrivate(loop, "spectator", BuildSpectator(player));
 
             return loop;
+        }
+
+        /// <summary>
+        /// The camera that takes over when the player dies: a free camera, loose on the island,
+        /// with the round still running under it. Disabled until GameLoop hands it the body's
+        /// last position.
+        /// </summary>
+        private static SpectatorCamera BuildSpectator(PlayerController player)
+        {
+            var go = new GameObject("SpectatorCamera");
+
+            var cam = go.AddComponent<Camera>();
+            cam.fieldOfView = 70f;
+            cam.farClipPlane = 400f;
+            cam.enabled = false;   // the player's camera owns the screen until they are dead
+
+            // Above the player's camera, not below. Depth is paint order — lower draws first and
+            // gets painted over — so a spectator at -1 would render underneath the very camera it
+            // is replacing on any frame where both happen to be live.
+            cam.depth = 1;
+
+            var spectator = go.AddComponent<SpectatorCamera>();
+            SetPrivate(spectator, "cam", cam);
+
+            // Handed the player's camera directly. Camera.main only finds *enabled* cameras
+            // tagged MainCamera, so a spectator that searched for it after switching itself on
+            // would be asking the wrong question at the wrong time.
+            Camera playerCam = player.GetComponentInChildren<Camera>();
+            if (playerCam != null) SetPrivate(spectator, "playerCamera", playerCam);
+
+            return spectator;
         }
 
         // ---------------------------------------------------------------------------- HUD
@@ -656,6 +695,12 @@ namespace Game.EditorTools
                     typeof(UnityEngine.EventSystems.EventSystem),
                     typeof(UnityEngine.EventSystems.StandaloneInputModule));
             }
+
+            // Volume, shadows, frame cap. In every scene, because a setting that only applies in
+            // the one you changed it in is not a setting. BuildHud is common to both playable
+            // maps, so one call here covers Island and Arena both.
+            if (Object.FindFirstObjectByType<Game.Core.SettingsApplier>() == null)
+                new GameObject("Settings", typeof(Game.Core.SettingsApplier));
 
             Transform c = canvasGo.transform;
 
@@ -699,32 +744,60 @@ namespace Game.EditorTools
             TMP_Text scoreLabel = MakeText(c, "ScoreLabel", "0", 34,
                 new Vector2(1f, 1f), new Vector2(-160f, -60f), TextAlignmentOptions.Right);
 
-            // Touch controls
-            VirtualJoystick joystick = BuildJoystick(c);
-            TouchLookArea lookArea = BuildLookArea(c);
+            // Touch controls, all under one parent so death can take them away in one line. They
+            // are raycast targets — the look area covers the whole screen — and a dead player
+            // still holding a live FIRE button on top of the LOBBY button is a trap.
+            var touchGo = new GameObject("TouchControls", typeof(RectTransform));
+            touchGo.transform.SetParent(c, false);
+            Stretch(touchGo.GetComponent<RectTransform>());
+            Transform t = touchGo.transform;
+
+            VirtualJoystick joystick = BuildJoystick(t);
+            TouchLookArea lookArea = BuildLookArea(t);
+
             // Right thumb: fire under the pad, everything else ringed around it.
-            HoldButton fire   = BuildHoldButton(c, "FireButton",   "FIRE",   new Vector2(1f, 0f), new Vector2(-190f, 190f), 150f);
-            HoldButton aim    = BuildHoldButton(c, "AimButton",    "AIM",    new Vector2(1f, 0f), new Vector2(-370f, 300f), 110f);
-            HoldButton reload = BuildHoldButton(c, "ReloadButton", "RELOAD", new Vector2(1f, 0f), new Vector2(-190f, 380f), 110f);
-            HoldButton jump   = BuildHoldButton(c, "JumpButton",   "JUMP",   new Vector2(1f, 0f), new Vector2(-360f, 130f), 110f);
+            HoldButton fire   = BuildHoldButton(t, "FireButton",   "FIRE",   new Vector2(1f, 0f), new Vector2(-190f, 190f), 150f);
+            HoldButton aim    = BuildHoldButton(t, "AimButton",    "AIM",    new Vector2(1f, 0f), new Vector2(-370f, 300f), 110f);
+            HoldButton reload = BuildHoldButton(t, "ReloadButton", "RELOAD", new Vector2(1f, 0f), new Vector2(-190f, 380f), 110f);
+            HoldButton jump   = BuildHoldButton(t, "JumpButton",   "JUMP",   new Vector2(1f, 0f), new Vector2(-360f, 130f), 110f);
 
             // Left thumb: sprint and slide sit beside the move stick, where the thumb already is.
-            HoldButton sprint = BuildHoldButton(c, "SprintButton", "RUN",    new Vector2(0f, 0f), new Vector2(510f, 300f), 110f);
-            HoldButton slide  = BuildHoldButton(c, "SlideButton",  "SLIDE",  new Vector2(0f, 0f), new Vector2(530f, 150f), 110f);
+            HoldButton sprint = BuildHoldButton(t, "SprintButton", "RUN",    new Vector2(0f, 0f), new Vector2(510f, 300f), 110f);
+            HoldButton slide  = BuildHoldButton(t, "SlideButton",  "SLIDE",  new Vector2(0f, 0f), new Vector2(530f, 150f), 110f);
 
             Minimap minimap = BuildMinimap(c, player.transform);
 
-            // Game over
-            var gameOverGo = new GameObject("GameOverPanel", typeof(Image));
+            // Game over. Not a black curtain any more: the spectator camera is live behind this,
+            // and the round is still running out there. So the panel is a band at the top and a
+            // row of buttons at the bottom, and the middle of the screen stays the island.
+            var gameOverGo = new GameObject("GameOverPanel", typeof(RectTransform));
             gameOverGo.transform.SetParent(c, false);
-            var goRt = gameOverGo.GetComponent<RectTransform>();
-            Stretch(goRt);
-            gameOverGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.8f);
+            Stretch(gameOverGo.GetComponent<RectTransform>());
 
-            MakeText(gameOverGo.transform, "GameOverTitle", "YOU DIED", 80,
-                new Vector2(0.5f, 0.5f), new Vector2(0f, 120f), TextAlignmentOptions.Center);
-            TMP_Text stats = MakeText(gameOverGo.transform, "GameOverStats", "", 40,
-                new Vector2(0.5f, 0.5f), new Vector2(0f, 0f), TextAlignmentOptions.Center);
+            UiKit.MakeRect(gameOverGo.transform, "TopBand", new Color(0f, 0f, 0f, 0.78f),
+                new Vector2(0.5f, 1f), new Vector2(0f, -150f), new Vector2(4000f, 300f));
+
+            MakeText(gameOverGo.transform, "GameOverTitle", "YOU DIED", 76,
+                new Vector2(0.5f, 1f), new Vector2(0f, -110f), TextAlignmentOptions.Center);
+
+            TMP_Text stats = MakeText(gameOverGo.transform, "GameOverStats", "", 34,
+                new Vector2(0.5f, 1f), new Vector2(0f, -195f), TextAlignmentOptions.Center);
+
+            TMP_Text ghostHint = MakeText(gameOverGo.transform, "GhostHint",
+                "WASD to drift  ·  Shift to fly  ·  the island does not stop for you", 20,
+                new Vector2(0.5f, 1f), new Vector2(0f, -245f), TextAlignmentOptions.Center);
+            ghostHint.color = new Color(0.5f, 0.48f, 0.45f);
+
+            UiKit.MakeRect(gameOverGo.transform, "BottomBand", new Color(0f, 0f, 0f, 0.78f),
+                new Vector2(0.5f, 0f), new Vector2(0f, 70f), new Vector2(4000f, 140f));
+
+            Button retryBtn = UiKit.MakeButton(gameOverGo.transform, "Retry", "PLAY AGAIN",
+                UiKit.Gold, new Color(0.06f, 0.05f, 0.04f),
+                new Vector2(0.5f, 0f), new Vector2(-170f, 70f), new Vector2(300f, 58f), 22f);
+
+            Button lobbyBtn = UiKit.MakeButton(gameOverGo.transform, "Lobby", "LOBBY",
+                new Color(0.18f, 0.17f, 0.15f), UiKit.TextWhite,
+                new Vector2(0.5f, 0f), new Vector2(170f, 70f), new Vector2(300f, 58f), 22f);
 
             gameOverGo.SetActive(false);
 
@@ -743,6 +816,9 @@ namespace Game.EditorTools
             SetPrivate(hud, "hitmarker", hitmarker);
             SetPrivate(hud, "gameOverPanel", gameOverGo);
             SetPrivate(hud, "gameOverStats", stats);
+            SetPrivate(hud, "retryButton", retryBtn);
+            SetPrivate(hud, "lobbyButton", lobbyBtn);
+            SetPrivate(hud, "touchControls", touchGo);
 
             var input = player.GetComponent<PlayerInputHub>();
             SetPrivate(input, "moveJoystick", joystick);
@@ -754,9 +830,16 @@ namespace Game.EditorTools
             SetPrivate(input, "sprintButton", sprint);
             SetPrivate(input, "slideButton", slide);
 
-            // The look area must sit behind every button, or it swallows their touches.
+            // Within the touch group: the look area behind every button, or it swallows their
+            // touches — it covers the whole screen and uGUI gives the hit to the topmost.
             lookArea.transform.SetAsFirstSibling();
+
+            // On the canvas: the vignette behind everything, and the game-over panel in front of
+            // everything. The panel is created before the touch controls, so without this its
+            // buttons sit *under* a full-screen look area and cannot be pressed — and the only
+            // way out of a lost match would be to kill the app.
             vignette.transform.SetAsFirstSibling();
+            gameOverGo.transform.SetAsLastSibling();
         }
 
         /// <summary>
@@ -1022,12 +1105,18 @@ namespace Game.EditorTools
                 case float f:       prop.floatValue = f; break;
                 case string s:      prop.stringValue = s; break;
                 case LayerMask lm:  prop.intValue = lm.value; break;
+                case System.Enum e: prop.intValue = System.Convert.ToInt32(e); break;
                 case Object o:      prop.objectReferenceValue = o; break;
-                case Transform[] arr:
+
+                // Any array of Unity objects, not just Transform[]. The lobby wires arrays of
+                // Image and Button, and the old Transform[]-only case would have taken the
+                // default branch — which logs and returns, leaving the field silently null.
+                case Object[] arr:
                     prop.arraySize = arr.Length;
                     for (int k = 0; k < arr.Length; k++)
                         prop.GetArrayElementAtIndex(k).objectReferenceValue = arr[k];
                     break;
+
                 default:
                     Debug.LogError($"SetPrivate: unhandled type {value?.GetType()}");
                     return;

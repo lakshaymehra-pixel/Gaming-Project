@@ -12,8 +12,16 @@ namespace Game.Player
         [SerializeField] private Transform cameraPivot;
 
         [Header("Sensitivity")]
+        [Tooltip("The tuned baseline. The settings slider scales this rather than replacing it, " +
+                 "so the middle of the slider is the value the game was actually built at.")]
         [SerializeField] private float sensitivity = 0.15f;
+
         [SerializeField] private float aimSensitivityMultiplier = 0.6f;
+
+        /// <summary>Read once. A settings change mid-match cannot reach here anyway — the panel
+        /// is in the lobby — and reading PlayerPrefs every frame to find that out would be
+        /// absurd.</summary>
+        private float _settingsScale = 1f;
 
         [Header("Limits")]
         [SerializeField] private float minPitch = -80f;
@@ -33,12 +41,15 @@ namespace Game.Player
         private void Start()
         {
             _yaw = _targetYaw = transform.eulerAngles.y;
+            _settingsScale = Game.Core.GameSettings.SensitivityScale;
         }
 
         /// <param name="delta">Raw pointer/stick delta in pixels for this frame.</param>
         public void Look(Vector2 delta)
         {
-            float s = sensitivity * (IsAiming ? aimSensitivityMultiplier : 1f);
+            float s = sensitivity * _settingsScale
+                      * (IsAiming ? aimSensitivityMultiplier : 1f);
+
             _targetYaw += delta.x * s;
             _targetPitch = Mathf.Clamp(_targetPitch - delta.y * s, minPitch, maxPitch);
         }

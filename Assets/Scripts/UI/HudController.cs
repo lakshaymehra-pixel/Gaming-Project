@@ -44,6 +44,13 @@ namespace Game.UI
         [Header("Screens")]
         [SerializeField] private GameObject gameOverPanel;
         [SerializeField] private TMP_Text gameOverStats;
+        [SerializeField] private UnityEngine.UI.Button retryButton;
+        [SerializeField] private UnityEngine.UI.Button lobbyButton;
+
+        [Tooltip("Joystick, fire, aim, the lot. Hidden on death — they are full-screen raycast " +
+                 "targets, and a dead player pawing at a FIRE button that does nothing while " +
+                 "the LOBBY button sits under it is a bad way to end a match.")]
+        [SerializeField] private GameObject touchControls;
 
         private Weapon _weapon;
 
@@ -69,6 +76,9 @@ namespace Game.UI
                 _weapon.AmmoChanged += OnAmmoChanged;
                 _weapon.Hit += OnHit;
             }
+
+            if (retryButton != null) retryButton.onClick.AddListener(OnRestartPressed);
+            if (lobbyButton != null) lobbyButton.onClick.AddListener(OnLobbyPressed);
 
             if (gameOverPanel != null) gameOverPanel.SetActive(false);
             if (hitmarker != null) hitmarker.alpha = 0f;
@@ -172,14 +182,29 @@ namespace Game.UI
         private void OnGameOver()
         {
             if (gameOverPanel != null) gameOverPanel.SetActive(true);
+
+            // The controls go with the player. They are full-screen raycast targets — the look
+            // area especially — and leaving them live means a dead player mashing a FIRE button
+            // that does nothing, on top of the LOBBY button that would get them out.
+            if (touchControls != null) touchControls.SetActive(false);
+
+            // The XP alongside the stats, because that is the number that turns a death into
+            // progress, and progress is the only reason anyone presses PLAY AGAIN.
+            int wave = game.Spawner.WaveNumber;
+
             if (gameOverStats != null)
                 gameOverStats.text =
-                    $"WAVE {game.Spawner.WaveNumber}\n" +
-                    $"{game.Kills} KILLS\n" +
-                    $"{game.Score} POINTS";
+                    $"WAVE {wave}   ·   {game.Kills} KILLS   ·   {game.Score} POINTS   " +
+                    $"·   +{Game.Core.PlayerProfile.XpFor(game.Kills, wave)} XP";
+
+            if (damageVignette != null) damageVignette.alpha = 0f;
         }
 
-        /// <summary>Hooked to the Restart button in the game-over panel.</summary>
+        /// <summary>Hooked to PLAY AGAIN in the game-over panel.</summary>
         public void OnRestartPressed() => game.Restart();
+
+        /// <summary>Hooked to LOBBY in the game-over panel. The match is already banked by then;
+        /// this just leaves.</summary>
+        public void OnLobbyPressed() => game.QuitToLobby();
     }
 }

@@ -71,6 +71,8 @@ namespace Game.EditorTools
                 typeof(UnityEngine.EventSystems.EventSystem),
                 typeof(UnityEngine.EventSystems.StandaloneInputModule));
 
+            new GameObject("Settings", typeof(Game.Core.SettingsApplier));
+
             // Canvas
             var canvasGo = new GameObject("LoginCanvas",
                 typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -325,7 +327,9 @@ namespace Game.EditorTools
             ArenaSceneBuilder.SetPrivate(login, "percentText", percentText);
             ArenaSceneBuilder.SetPrivate(login, "tapText", tapText);
             ArenaSceneBuilder.SetPrivate(login, "loadingBar", fillImg);
-            ArenaSceneBuilder.SetPrivate(login, "nextSceneName", "Island");
+            // The lobby, not the island. Signing in used to drop you straight into a match with
+            // no chance to see who you were or pick where you were going.
+            ArenaSceneBuilder.SetPrivate(login, "nextSceneName", "Lobby");
             ArenaSceneBuilder.SetPrivate(login, "bgmSource", bgm);
             ArenaSceneBuilder.SetPrivate(login, "sfxSource", sfx);
 
@@ -451,31 +455,36 @@ namespace Game.EditorTools
         }
 
         /// <summary>
-        /// Forces Splash at 0, Login at 1, everything else after.
+        /// Forces the boot order: Splash, Login, Lobby, then the maps in whatever order they
+        /// were built. Index 0 is what a device launches into, so this is the one piece of the
+        /// build settings that cannot be left to chance.
+        ///
+        /// Internal and shared, because every builder that adds a scene can disturb the order,
+        /// and two copies of this logic would eventually disagree about it.
         /// </summary>
-        private static void EnsureBuildOrder()
+        internal static void EnsureBuildOrder()
         {
             var all = new System.Collections.Generic.List<EditorBuildSettingsScene>(
                 EditorBuildSettings.scenes);
 
-            // Remove missing files
             all.RemoveAll(s => !System.IO.File.Exists(s.path));
 
-            // Pull splash and login to front in correct order
-            var splash = all.FindIndex(s => s.path.EndsWith("Splash.unity"));
-            if (splash > 0) { var s = all[splash]; all.RemoveAt(splash); all.Insert(0, s); }
+            // Walk the front of the list in order, pulling each scene into place. Doing it in
+            // sequence means each one lands after the ones before it, whatever it started as.
+            string[] front = { "Splash.unity", "Login.unity", "Lobby.unity" };
 
-            var login = all.FindIndex(s => s.path.EndsWith("Login.unity"));
-            if (login >= 0 && login != 1)
+            for (int target = 0; target < front.Length; target++)
             {
-                var l = all[login];
-                all.RemoveAt(login);
-                all.Insert(Mathf.Min(1, all.Count), l);
+                int at = all.FindIndex(s => s.path.EndsWith(front[target]));
+                if (at < 0 || at == target) continue;
+
+                EditorBuildSettingsScene scene = all[at];
+                all.RemoveAt(at);
+                all.Insert(Mathf.Min(target, all.Count), scene);
             }
 
             EditorBuildSettings.scenes = all.ToArray();
 
-            // Log the order
             for (int i = 0; i < all.Count; i++)
                 Debug.Log($"  Build index {i}: {all[i].path}");
         }

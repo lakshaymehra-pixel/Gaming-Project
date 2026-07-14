@@ -82,6 +82,8 @@ namespace Game.EditorTools
             // the terrain carries a TerrainCollider. Batching is a separate concern.
             MarkFoliageStatic();
 
+            WireFoliageDensity();
+
             ArenaSceneBuilder.BakeNavMesh();
 
             ArenaSceneBuilder.SaveSceneChecked(scene, ScenePath);
@@ -100,6 +102,35 @@ namespace Game.EditorTools
         /// path around is decided by the collider: trunks and logs have one, leaf canopies do
         /// not, and the surface bake collects exactly the former.
         /// </summary>
+        /// <summary>
+        /// Hands the settings screen the one foliage layer it is allowed to thin.
+        ///
+        /// "Floor" — ferns, bushes, grass — is the only group whose props carry no collider, and
+        /// that is exactly the test for whether culling it is safe: nothing there stops a bullet
+        /// or a path, so removing it cannot change a fight. It is also the biggest group (520 of
+        /// the ~1300 props), so it is the one worth thinning.
+        ///
+        /// The trunks, canopies, palms and logs stay whatever the setting says. They are cover
+        /// and they are the NavMesh, and a graphics slider that quietly deleted the wall an enemy
+        /// was walking around would be the worst bug in the project.
+        /// </summary>
+        private static void WireFoliageDensity()
+        {
+            GameObject jungle = GameObject.Find("Jungle");
+            if (jungle == null) return;
+
+            Transform floor = jungle.transform.Find("Floor");
+            if (floor == null)
+            {
+                Debug.LogWarning("Island: no Floor group — foliage detail will have nothing " +
+                                 "to thin.");
+                return;
+            }
+
+            var density = jungle.AddComponent<FoliageDensity>();
+            ArenaSceneBuilder.SetPrivate(density, "cullableGroups", new Transform[] { floor });
+        }
+
         private static void MarkFoliageStatic()
         {
             GameObject jungle = GameObject.Find("Jungle");
