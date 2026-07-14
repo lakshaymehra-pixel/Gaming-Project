@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -47,12 +48,24 @@ namespace Game.UI
                  "in total silence reads as a crash.")]
         [SerializeField] private AudioSource bedSource;
 
-        [SerializeField] private AudioSource sfxSource;
+        [Tooltip("Night jungle — birds and insects, on separate looping sources so they drift " +
+                 "against each other. It is the island you are about to land on, and it goes " +
+                 "quiet when the creature arrives.")]
+        [SerializeField] private AudioSource[] jungleSources;
+
         [SerializeField] private AudioClip gunshotClip;
         [SerializeField] private AudioClip gunBurstClip;
         [SerializeField] private AudioClip explosionClip;
         [SerializeField] private AudioClip roarClip;
         [SerializeField] private AudioClip tickClip;
+
+        [Header("Jungle mix")]
+        [Tooltip("How loud the jungle sits before anything happens.")]
+        [SerializeField] private float jungleVolume = 0.5f;
+
+        [Tooltip("What it drops to once the first roar lands. Real forest goes silent when " +
+                 "something big is close — that silence is what tells you it is.")]
+        [SerializeField] private float jungleHushed = 0.06f;
 
         [Header("Next scene")]
         [SerializeField] private string nextSceneName = "Island";
@@ -69,8 +82,34 @@ namespace Game.UI
         private float _nextFlickerAt;
         private float _nextLightningAt;
 
+        /// <summary>Each jungle source's volume as the builder authored it. Ducking scales
+        /// these rather than overwriting them, so birds stay louder than insects the whole
+        /// way down and the way back out.</summary>
+        private float[] _jungleMix;
+
+        /// <summary>The jungle's current overall level, 0..1, on top of the mix above.</summary>
+        private float _jungleLevel = 1f;
+
+        /// <summary>Every one-shot voice spawned so far, so the final fade can duck the ones
+        /// still ringing. Entries go null as Unity destroys them; the fade skips those.</summary>
+        private readonly List<AudioSource> _voices = new();
+        private Transform _voiceRoot;
+
         private void Start()
         {
+            // Remember the authored balance before anything touches the volumes.
+            if (jungleSources != null)
+            {
+                _jungleMix = new float[jungleSources.Length];
+                for (int i = 0; i < jungleSources.Length; i++)
+                {
+                    _jungleMix[i] = jungleSources[i] != null ? jungleSources[i].volume : 0f;
+                }
+            }
+
+            _jungleLevel = jungleVolume;
+            SetJungle(_jungleLevel);
+
             // Everything hidden; the sequence reveals it piece by piece.
             foreach (var hole in bulletHoles)
                 if (hole != null) hole.gameObject.SetActive(false);
@@ -150,11 +189,19 @@ namespace Game.UI
             // HORROR PHASE: The original KAAL RAAT sequence begins
             // ═══════════════════════════════════════════════════════════
 
-            // ---- 0.0s  Darkness. Only the drone and the heartbeat under it.
+            // ---- 0.0s  Darkness — but not silence. The island is already there: night
+            // jungle, birds and insects, the ordinary sound of a place with nothing wrong
+            // with it. Everything after this is that sound being taken away.
             yield return WaitOrSkip(0.7f);
 
             // ---- 0.7s  Something out there, still far off. Low and slow.
             PlayOneShot(roarClip, 0.3f, 0.75f);
+
+            // The forest hears it before you understand it. Birds and insects cut out — the
+            // hush is the first real sign that something is wrong, and it lands a beat before
+            // anyone on screen reacts.
+            StartCoroutine(DuckJungle(jungleHushed, 0.7f));
+
             yield return WaitOrSkip(0.85f);
 
             // ---- 1.55s  It answers itself, closer. Louder. Angrier.
@@ -281,47 +328,90 @@ namespace Game.UI
             // to end with it — otherwise a tap at second two leaves the slam's swell rising
             // under a screen where the slam has already happened. The bed keeps playing.
             if (_skip && droneSource != null) droneSource.Stop();
+
+            // And the jungle stays hushed: skipping means the creature arrived, whether or not
+            // you watched it. Birds do not come back for that.
+            _jungleLevel = jungleHushed;
+            SetJungle(_jungleLevel);
         }
 
         // --------------------------------------------------------------------- beats
 
         /// <summary>
-        /// The burst. Shots accelerate — panic fire in the dark. Uses real gun burst
-        /// clip layered with individual shots for each bullet hole.
+        /// The panic fire. Two weapons' worth of sound, and each one plays where it belongs.
+        ///
+        /// The first shots are spaced, so they are single reports — one SFX_GunShot per
+        /// bullet hole, one hole per bang, aimed and countable. The last shots are 0.1s
+        /// apart, which is not aimed fire, it is a trigger held down: those become one
+        /// SFX_GunBurst, played once, with their holes punched in under it.
+        ///
+        /// This used to run the burst clip and the single shots simultaneously for the whole
+        /// volley — two recordings of different guns firing at different rates, on top of
+        /// each other. That is the thing that sounded wrong.
         /// </summary>
         private IEnumerator Fusillade()
         {
-            // Play the full auto burst sound underneath everything
-            PlayOneShot(gunBurstClip, 0.9f, Random.Range(0.92f, 1.05f));
+            int total = bulletHoles.Length;
+            if (total == 0) yield break;
 
-            for (int i = 0; i < bulletHoles.Length; i++)
+            // Aimed shots, one clip each. Clamped to at least one so a short array still opens
+            // with a single report rather than starting on a burst — but never to more than
+            // there are holes, or the volley fires at an index that does not exist.
+            int singles = Mathf.Clamp(total - BurstShots, 1, total);
+
+            for (int i = 0; i < singles; i++)
             {
                 if (_skip) yield break;
 
-                float p = bulletHoles.Length > 1
-                    ? i / (float)(bulletHoles.Length - 1)
-                    : 0f;
+                float p = singles > 1 ? i / (float)(singles - 1) : 0f;
+                Bang(i, gunshotClip, 0.85f + p * 0.25f, 22f + p * 6f);
 
-                // Later shots hit harder: the shooter is closer to losing it.
-                Bang(i, 1f + p * 0.5f);
-
-                yield return WaitOrSkip(Mathf.Lerp(0.34f, 0.1f, p * p));
+                // Gaps close as he loses his nerve — 0.34s down to 0.16s.
+                yield return WaitOrSkip(Mathf.Lerp(0.34f, 0.16f, p));
             }
 
-            // Explosion after the burst — something got hit
+            if (_skip) yield break;
+
+            // The trigger goes down. One burst clip, and the remaining holes appear inside it
+            // at the rate the recording actually fires — not on their own clock.
+            yield return BurstFire(singles, total);
+
+            // Something out there goes up.
             PlayOneShot(explosionClip, 0.6f, 0.85f);
             _shakeAmplitude = Mathf.Max(_shakeAmplitude, 25f);
             Flash(0.5f, 0.12f);
         }
 
-        private void Bang(int index, float force = 1f)
+        /// <summary>How many of the impacts belong to the held-trigger burst at the end.</summary>
+        private const int BurstShots = 2;
+
+        private IEnumerator BurstFire(int from, int to)
         {
+            PlayOneShot(gunBurstClip, 0.95f, 1f);
+
+            for (int i = from; i < to; i++)
+            {
+                Bang(i, null, 0f, 26f);              // the burst clip is the sound; no extra shot
+                yield return WaitOrSkip(0.09f);
+                if (_skip) yield break;
+            }
+        }
+
+        /// <summary>
+        /// One impact: the hole appears, the frame flashes and kicks. The clip is optional —
+        /// during the burst the sound is already playing and a second one would just muddy it.
+        /// </summary>
+        private void Bang(int index, AudioClip clip, float volume, float shake)
+        {
+            if (index < 0 || index >= bulletHoles.Length) return;
+
             RectTransform hole = bulletHoles[index];
             if (hole != null) hole.gameObject.SetActive(true);
 
-            PlayOneShot(gunshotClip, 0.85f * force, Random.Range(0.9f, 1.08f));
-            Flash(0.62f * force, 0.075f);
-            _shakeAmplitude = Mathf.Max(_shakeAmplitude, 22f * force);
+            if (clip != null) PlayOneShot(clip, volume, Random.Range(0.94f, 1.06f));
+
+            Flash(0.6f, 0.075f);
+            _shakeAmplitude = Mathf.Max(_shakeAmplitude, shake);
         }
 
         /// <summary>
@@ -426,6 +516,21 @@ namespace Game.UI
 
             float droneVolume = droneSource != null ? droneSource.volume : 0f;
             float bedVolume = bedSource != null ? bedSource.volume : 0f;
+            float startJungle = _jungleLevel;
+
+            // Snapshot the one-shots that are still sounding, so they can be ramped down from
+            // wherever they happen to be rather than from some assumed level. The final roar
+            // is pitched to 0.45 and so runs about twice the length of its file — it is very
+            // often one of these.
+            var voices = new List<AudioSource>(_voices.Count);
+            var voiceVolumes = new List<float>(_voices.Count);
+
+            foreach (AudioSource voice in _voices)
+            {
+                if (voice == null) continue;
+                voices.Add(voice);
+                voiceVolumes.Add(voice.volume);
+            }
 
             float t = 0f;
             while (t < seconds)
@@ -435,16 +540,62 @@ namespace Game.UI
 
                 if (content != null) content.alpha = 1f - p;
 
-                // Both, or the bed keeps humming under the loading screen after the picture
-                // is gone. The scored drone has usually finished by now, which is exactly why
-                // fading it alone was never enough.
+                // Everything, or something keeps sounding under the loading screen after the
+                // picture is gone. The scored drone has usually finished by now, which is
+                // exactly why fading it alone was never enough.
                 if (droneSource != null) droneSource.volume = droneVolume * (1f - p);
                 if (bedSource != null) bedSource.volume = bedVolume * (1f - p);
+
+                _jungleLevel = startJungle * (1f - p);
+                SetJungle(_jungleLevel);
+
+                for (int i = 0; i < voices.Count; i++)
+                {
+                    if (voices[i] != null) voices[i].volume = voiceVolumes[i] * (1f - p);
+                }
 
                 yield return null;
             }
 
             if (_load != null) _load.allowSceneActivation = true;
+        }
+
+        /// <summary>
+        /// Sets the jungle's overall level, keeping the authored balance between its sources —
+        /// birds over insects, whatever the builder decided — because ducking a mix by
+        /// overwriting each volume with the same number is how a mix stops being a mix.
+        /// </summary>
+        private void SetJungle(float level)
+        {
+            if (jungleSources == null || _jungleMix == null) return;
+
+            for (int i = 0; i < jungleSources.Length; i++)
+            {
+                if (jungleSources[i] != null)
+                    jungleSources[i].volume = _jungleMix[i] * level;
+            }
+        }
+
+        private IEnumerator DuckJungle(float to, float seconds)
+        {
+            float from = _jungleLevel;
+            float t = 0f;
+
+            while (t < seconds)
+            {
+                // Bail on a skip: ApplyFinalState has already snapped the jungle to where the
+                // end of the sequence leaves it, and this fade would spend the next half
+                // second dragging it back to a level the picture has moved past.
+                if (_skip) yield break;
+
+                t += Time.deltaTime;
+                _jungleLevel = Mathf.Lerp(from, to, t / seconds);
+                SetJungle(_jungleLevel);
+                yield return null;
+            }
+
+            _jungleLevel = to;
+            SetJungle(_jungleLevel);
         }
 
         // ------------------------------------------------------------ ambient motion
@@ -547,12 +698,45 @@ namespace Game.UI
             if (flashOverlay != null) flashOverlay.color = Color.clear;
         }
 
+        /// <summary>
+        /// Plays a clip at its own pitch, on its own voice.
+        ///
+        /// PlayOneShot cannot do this: pitch lives on the AudioSource, not on the shot, so a
+        /// gunshot pitched to 1.05 was also re-pitching the roar still ringing out underneath
+        /// it. Every overlapping sound in this intro was dragging the others around. So each
+        /// shot gets a throwaway AudioSource, and nothing it does is audible on anything else.
+        ///
+        /// They are kept in _voices so the final fade can find them. A roar started at pitch
+        /// 0.45 runs twice the length of its file, so the last one is very often still
+        /// sounding when the player taps — and a fade that ducks the drone and the jungle but
+        /// not the roar leaves it blaring over a black screen until the scene unload cuts it.
+        /// </summary>
         private void PlayOneShot(AudioClip clip, float volume, float pitch)
         {
-            if (sfxSource == null || clip == null) return;
-            sfxSource.pitch = pitch;
-            sfxSource.PlayOneShot(clip, volume);
+            if (clip == null) return;
+
+            if (_voiceRoot == null)
+            {
+                _voiceRoot = new GameObject("Voices").transform;
+                _voiceRoot.SetParent(transform, false);
+            }
+
+            var go = new GameObject($"SFX_{clip.name}");
+            go.transform.SetParent(_voiceRoot, false);
+
+            var source = go.AddComponent<AudioSource>();
+            source.clip = clip;
+            source.volume = volume;
+            source.pitch = pitch;
+            source.spatialBlend = 0f;
+            source.Play();
+
+            _voices.Add(source);
+
+            // Pitch stretches the clip: a shot at 0.5 runs twice as long as the file.
+            Destroy(go, clip.length / Mathf.Max(0.01f, pitch) + 0.1f);
         }
+
 
         private IEnumerator WaitOrSkip(float seconds)
         {

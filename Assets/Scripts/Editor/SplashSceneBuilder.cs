@@ -74,11 +74,11 @@ namespace Game.EditorTools
 
             AudioSource drone = BuildDroneSource();
             AudioSource bed = BuildBedSource();
+            AudioSource[] jungle = BuildJungleSources();
 
-            var sfxGo = new GameObject("SplashSfx");
-            var sfx = sfxGo.AddComponent<AudioSource>();
-            sfx.playOnAwake = false;
-            sfx.spatialBlend = 0f;
+            // No shared SFX source any more: pitch lives on an AudioSource, not on a shot, so
+            // one shared voice meant every re-pitched gunshot dragged the roar underneath it
+            // along. The controller spawns a voice per shot instead.
 
             var canvasGo = new GameObject("Splash",
                 typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -165,12 +165,12 @@ namespace Game.EditorTools
             ArenaSceneBuilder.SetPrivate(controller, "tapPrompt", tap);
             ArenaSceneBuilder.SetPrivate(controller, "droneSource", drone);
             ArenaSceneBuilder.SetPrivate(controller, "bedSource", bed);
-            ArenaSceneBuilder.SetPrivate(controller, "sfxSource", sfx);
+            SetObjectArray(controller, "jungleSources", jungle);
             ArenaSceneBuilder.SetPrivate(controller, "nextSceneName", "Login");
             ArenaSceneBuilder.SetPrivate(controller, "ageWarningGroup", ageWarning);
             ArenaSceneBuilder.SetPrivate(controller, "studioGroup", studio);
             ArenaSceneBuilder.SetPrivate(controller, "poweredByGroup", poweredBy);
-            SetHoles(controller, holes);
+            SetObjectArray(controller, "bulletHoles", holes);
 
             WireClip(controller, "gunshotClip", "Assets/Audio/SFX_GunShot.mp3",
                      "Assets/Audio/SFX_Fire.wav");
@@ -194,13 +194,26 @@ namespace Game.EditorTools
                       "too, and turn the sound on.");
         }
 
-        private static void SetHoles(SplashController controller, RectTransform[] holes)
+        /// <summary>
+        /// Writes a private array of object references. ArenaSceneBuilder.SetPrivate handles
+        /// single objects and Transform[] only, and widening it to every array type the
+        /// builders might want is more machinery than a five-line loop deserves.
+        /// </summary>
+        private static void SetObjectArray(Object target, string field, Object[] values)
         {
-            var so = new SerializedObject(controller);
-            SerializedProperty prop = so.FindProperty("bulletHoles");
-            prop.arraySize = holes.Length;
-            for (int i = 0; i < holes.Length; i++)
-                prop.GetArrayElementAtIndex(i).objectReferenceValue = holes[i];
+            var so = new SerializedObject(target);
+            SerializedProperty prop = so.FindProperty(field);
+
+            if (prop == null)
+            {
+                Debug.LogError($"Field '{field}' not found on {target.GetType().Name}.");
+                return;
+            }
+
+            prop.arraySize = values.Length;
+            for (int i = 0; i < values.Length; i++)
+                prop.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
+
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -513,6 +526,53 @@ namespace Game.EditorTools
         }
 
         // --------------------------------------------------------------------- audio
+
+        /// <summary>
+        /// The island, heard before it is seen: real night-jungle recordings, birds over
+        /// insects, looping. It opens the sequence at full volume and the controller ducks it
+        /// to near-nothing the moment the first roar lands — a forest going quiet is how you
+        /// know something is in it.
+        ///
+        /// Birds and insects stay two sources rather than one mixed clip: the recordings are
+        /// different lengths, so looped separately they drift against each other and never
+        /// repeat the same pairing. That is what keeps a 40 KB insect loop from turning into
+        /// an audible tick.
+        /// </summary>
+        private static AudioSource[] BuildJungleSources()
+        {
+            var root = new GameObject("Jungle").transform;
+
+            return new[]
+            {
+                MakeLoop(root, "Birds", "Assets/Audio/AMB_Birds_Real.mp3",
+                         "Assets/Audio/AMB_Birds.wav", 1f),
+                MakeLoop(root, "Insects", "Assets/Audio/AMB_Insects_Real.mp3",
+                         "Assets/Audio/AMB_Insects.wav", 0.55f),
+            };
+        }
+
+        /// <param name="mix">Volume relative to the jungle as a whole. The controller scales
+        /// every source by this when it ducks, so the balance survives the fade.</param>
+        private static AudioSource MakeLoop(Transform parent, string name, string path,
+                                            string fallback, float mix)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+
+            var source = go.AddComponent<AudioSource>();
+            source.loop = true;
+            source.playOnAwake = true;
+            source.spatialBlend = 0f;
+            source.volume = mix;
+
+            var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(path)
+                       ?? AssetDatabase.LoadAssetAtPath<AudioClip>(fallback);
+
+            if (clip != null) source.clip = clip;
+            else Debug.LogWarning($"Splash: neither {path} nor {fallback} loaded.");
+
+            return source;
+        }
 
         /// <summary>
         /// The dread underneath, ten seconds of it: two low sines a fraction of a hertz
