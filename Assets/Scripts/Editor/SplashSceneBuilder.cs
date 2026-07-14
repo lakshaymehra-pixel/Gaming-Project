@@ -172,19 +172,30 @@ namespace Game.EditorTools
             ArenaSceneBuilder.SetPrivate(controller, "poweredByGroup", poweredBy);
             SetObjectArray(controller, "bulletHoles", holes);
 
-            WireClip(controller, "gunshotClip", "Assets/Audio/SFX_GunShot.mp3",
+            // Supplied recordings first, stock second, synth last. The single report and the
+            // burst are two different guns and stay two different clips: the volley opens on
+            // aimed shots and ends on a held trigger, and playing both recordings over the
+            // whole thing is what used to make it mud.
+            WireClip(controller, "gunshotClip",
+                     "Assets/Audio/SFX_GunShot_User.mp3",
+                     "Assets/Audio/SFX_GunShot.mp3",
                      "Assets/Audio/SFX_Fire.wav");
-            WireClip(controller, "gunBurstClip", "Assets/Audio/SFX_GunBurst.mp3",
-                     "Assets/Audio/SFX_Fire.wav");
-            WireClip(controller, "explosionClip", "Assets/Audio/SFX_Explosion.mp3", null);
 
-            // Real roar, synth as the fallback. Three of these carry the whole first half of
-            // the sequence — each one closer and pitched lower than the last — so this is the
-            // clip most worth having a real recording of.
-            WireClip(controller, "roarClip", "Assets/Audio/AMB_Roar_Real.mp3",
+            WireClip(controller, "gunBurstClip",
+                     "Assets/Audio/SFX_GunBurst_User.mp3",
+                     "Assets/Audio/SFX_GunBurst.mp3",
+                     "Assets/Audio/SFX_Fire.wav");
+
+            WireClip(controller, "explosionClip", "Assets/Audio/SFX_Explosion.mp3");
+
+            // Three roars carry the whole first half of the sequence, each closer and pitched
+            // lower than the last — of every clip in the intro, this is the one most worth
+            // having a real recording of.
+            WireClip(controller, "roarClip",
+                     "Assets/Audio/AMB_Roar_Real.mp3",
                      "Assets/Audio/AMB_Roar.wav");
 
-            WireClip(controller, "tickClip", "Assets/Audio/SFX_Empty.wav", null);
+            WireClip(controller, "tickClip", "Assets/Audio/SFX_Empty.wav");
 
             ArenaSceneBuilder.SaveSceneChecked(scene, ScenePath);
             ArenaSceneBuilder.AddSceneToBuildSettings(ScenePath);
@@ -217,20 +228,25 @@ namespace Game.EditorTools
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        private static void WireClip(Object target, string field, string path,
-            string fallback = null)
+        /// <summary>
+        /// Wires the first clip in <paramref name="paths"/> that actually loads. Ordered best
+        /// to worst: a supplied recording, then a stock one, then the synthesised bake — so a
+        /// project missing its audio still builds a splash that makes noise.
+        /// </summary>
+        private static void WireClip(Object target, string field, params string[] paths)
         {
-            var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(path);
-            if (clip == null && fallback != null)
-                clip = AssetDatabase.LoadAssetAtPath<AudioClip>(fallback);
-
-            if (clip == null)
+            foreach (string path in paths)
             {
-                Debug.LogWarning($"Splash: {path} not found — bake the game audio first " +
-                                 "(Game > Bake Weapon Audio / Bake Jungle Ambience).");
+                var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(path);
+                if (clip == null) continue;
+
+                ArenaSceneBuilder.SetPrivate(target, field, clip);
                 return;
             }
-            ArenaSceneBuilder.SetPrivate(target, field, clip);
+
+            Debug.LogWarning($"Splash: no clip found for {field}. Tried: " +
+                             string.Join(", ", paths) + ". Bake the game audio " +
+                             "(Game > Bake Weapon Audio / Bake Jungle Ambience).");
         }
 
         // ------------------------------------------------------------------ backdrop
@@ -528,19 +544,26 @@ namespace Game.EditorTools
         // --------------------------------------------------------------------- audio
 
         /// <summary>
-        /// The island, heard before it is seen: real night-jungle recordings, birds over
-        /// insects, looping. It opens the sequence at full volume and the controller ducks it
-        /// to near-nothing the moment the first roar lands — a forest going quiet is how you
-        /// know something is in it.
+        /// The island, heard before it is seen. It opens the sequence at ordinary volume — the
+        /// sound of a place with nothing wrong with it — and the controller ducks it to almost
+        /// nothing the moment the first roar lands. A forest going quiet is how you know
+        /// something is in it.
         ///
-        /// Birds and insects stay two sources rather than one mixed clip: the recordings are
-        /// different lengths, so looped separately they drift against each other and never
-        /// repeat the same pairing. That is what keeps a 40 KB insect loop from turning into
-        /// an audible tick.
+        /// One source if there is a full jungle recording to use, which is the good case: a
+        /// real field recording already has its birds and insects in balance, and splitting it
+        /// would only re-mix what someone already mixed.
+        ///
+        /// Two if there isn't, because the stock clips are separate stems. Looping them on
+        /// separate sources makes them drift against each other and never repeat the same
+        /// pairing — which is what keeps a 40 KB insect loop from turning into an audible tick.
         /// </summary>
         private static AudioSource[] BuildJungleSources()
         {
             var root = new GameObject("Jungle").transform;
+
+            var whole = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/AMB_Jungle_User.mp3");
+            if (whole != null)
+                return new[] { MakeLoop(root, "Jungle", whole, 1f) };
 
             return new[]
             {
@@ -551,10 +574,22 @@ namespace Game.EditorTools
             };
         }
 
-        /// <param name="mix">Volume relative to the jungle as a whole. The controller scales
-        /// every source by this when it ducks, so the balance survives the fade.</param>
         private static AudioSource MakeLoop(Transform parent, string name, string path,
                                             string fallback, float mix)
+        {
+            var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(path)
+                       ?? AssetDatabase.LoadAssetAtPath<AudioClip>(fallback);
+
+            if (clip == null)
+                Debug.LogWarning($"Splash: neither {path} nor {fallback} loaded.");
+
+            return MakeLoop(parent, name, clip, mix);
+        }
+
+        /// <param name="mix">Volume relative to the jungle as a whole. The controller scales
+        /// every source by this when it ducks, so the balance survives the fade.</param>
+        private static AudioSource MakeLoop(Transform parent, string name, AudioClip clip,
+                                            float mix)
         {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
@@ -565,12 +600,7 @@ namespace Game.EditorTools
             source.spatialBlend = 0f;
             source.volume = mix;
 
-            var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(path)
-                       ?? AssetDatabase.LoadAssetAtPath<AudioClip>(fallback);
-
-            if (clip != null) source.clip = clip;
-            else Debug.LogWarning($"Splash: neither {path} nor {fallback} loaded.");
-
+            source.clip = clip;   // null is survivable: silent source, warned about upstream
             return source;
         }
 
