@@ -31,10 +31,6 @@ namespace Game.EditorTools
         private static readonly Color TextWhite = new(0.92f, 0.9f, 0.88f);
         private static readonly Color TextDim = new(0.4f, 0.38f, 0.35f);
         private static readonly Color BarBg = new(0.15f, 0.12f, 0.1f);
-        private static readonly Color BtnGoogle = new(0.85f, 0.32f, 0.25f);
-        private static readonly Color BtnFacebook = new(0.23f, 0.35f, 0.6f);
-        private static readonly Color BtnTwitter = new(0.1f, 0.14f, 0.18f);
-        private static readonly Color BtnGuest = new(0.35f, 0.35f, 0.32f);
         private static readonly Color BottomBar = new(0.03f, 0.025f, 0.02f, 0.9f);
 
         [MenuItem("Game/Build Login Scene")]
@@ -45,13 +41,14 @@ namespace Game.EditorTools
             Scene scene = EditorSceneManager.NewScene(
                 NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
-            // Camera
-            var camGo = new GameObject("Camera");
-            var cam = camGo.AddComponent<Camera>();
-            cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = BgBot;
-            cam.orthographic = true;
-            camGo.AddComponent<AudioListener>();
+            // The same night jungle the splash walks into, standing still behind the login.
+            // It is the lobby: the island is already out there, waiting, while you pick a name.
+            SplashBackdrop.Stage stage = SplashBackdrop.Build();
+            stage.Camera.gameObject.AddComponent<AudioListener>();
+
+            // Nobody walks here — this is a held shot, not the approach. The sway in
+            // SplashCamera keeps it alive without going anywhere, because Begin() is never
+            // called and the walk never starts.
 
             // SFX
             var sfxGo = new GameObject("SFX");
@@ -179,42 +176,42 @@ namespace Game.EditorTools
             stripRt.anchorMax = new Vector2(1f, 0f);
             stripRt.pivot = new Vector2(0.5f, 0f);
             stripRt.anchoredPosition = Vector2.zero;
-            stripRt.sizeDelta = new Vector2(0f, 320f);
+            stripRt.sizeDelta = new Vector2(0f, 340f);
             stripGo.GetComponent<Image>().color = BottomBar;
             stripGo.GetComponent<Image>().raycastTarget = false;
 
             // Text sizes here are in a 1920x1080 reference space, so they are roughly half what
             // they look like on a phone held at arm's length. The old 16px labels came out at
             // about 3mm tall on a handset — legible on a monitor, not on the thing this ships to.
-            MakeText(bottomGo.transform, "SelectLabel",
-                "SELECT LOGIN METHOD", 26,
-                TextDim, new Vector2(0.5f, 0f), new Vector2(0f, 288f));
+            MakeText(bottomGo.transform, "SelectLabel", "SIGN IN", 26,
+                TextDim, new Vector2(0.5f, 0f), new Vector2(0f, 292f));
 
-            // Login buttons — one row, BGMI style.
-            float btnY = 190f;
-            float btnSize = 118f;
-            float spacing = 175f;
-            float startX = -spacing * 1.5f;
+            // The form. Two fields stacked, then the actions — the shape every login on a phone
+            // already has, so nobody has to work out where to start.
+            TMP_InputField userField = MakeInput(bottomGo.transform, "UsernameField",
+                "USERNAME", new Vector2(0f, 238f), password: false);
 
-            Button googleBtn = MakeIconButton(bottomGo.transform, "Google", "G",
-                BtnGoogle, Gold, new Vector2(startX, btnY), btnSize);
-            MakeText(bottomGo.transform, "GoogleLabel", "GOOGLE", 22,
-                TextWhite, new Vector2(0.5f, 0f), new Vector2(startX, btnY - 78f));
+            TMP_InputField passField = MakeInput(bottomGo.transform, "PasswordField",
+                "PASSWORD", new Vector2(0f, 178f), password: true);
 
-            Button fbBtn = MakeIconButton(bottomGo.transform, "Facebook", "f",
-                BtnFacebook, Gold, new Vector2(startX + spacing, btnY), btnSize);
-            MakeText(bottomGo.transform, "FBLabel", "FACEBOOK", 22,
-                TextWhite, new Vector2(0.5f, 0f), new Vector2(startX + spacing, btnY - 78f));
+            // Rejections land here, between the fields and the buttons, where the eye already is.
+            TMP_Text errorText = MakeText(bottomGo.transform, "ErrorText", "", 20,
+                new Color(0.95f, 0.3f, 0.25f), new Vector2(0.5f, 0f), new Vector2(0f, 138f));
 
-            Button twitterBtn = MakeIconButton(bottomGo.transform, "Twitter", "X",
-                BtnTwitter, Gold, new Vector2(startX + spacing * 2, btnY), btnSize);
-            MakeText(bottomGo.transform, "TwitterLabel", "TWITTER", 22,
-                TextWhite, new Vector2(0.5f, 0f), new Vector2(startX + spacing * 2, btnY - 78f));
+            Button signInBtn = MakeWideButton(bottomGo.transform, "SignIn", "SIGN IN",
+                Gold, new Color(0.06f, 0.05f, 0.04f), new Vector2(-165f, 88f), 300f);
 
-            Button guestBtn = MakeIconButton(bottomGo.transform, "Guest", "?",
-                BtnGuest, Gold, new Vector2(startX + spacing * 3, btnY), btnSize);
-            MakeText(bottomGo.transform, "GuestLabel", "GUEST", 22,
-                TextWhite, new Vector2(0.5f, 0f), new Vector2(startX + spacing * 3, btnY - 78f));
+            Button registerBtn = MakeWideButton(bottomGo.transform, "Register", "REGISTER",
+                new Color(0.22f, 0.20f, 0.18f), TextWhite, new Vector2(165f, 88f), 300f);
+
+            Button guestBtn = MakeWideButton(bottomGo.transform, "Guest", "PLAY AS GUEST",
+                new Color(0.14f, 0.13f, 0.12f), TextDim, new Vector2(0f, 32f), 630f);
+
+            // Says out loud that there is no server behind this yet. LoginScreen hides it the
+            // moment there is one.
+            TMP_Text offlineNotice = MakeText(bottomGo.transform, "OfflineNotice",
+                "OFFLINE MODE", 16, new Color(0.55f, 0.45f, 0.2f),
+                new Vector2(0.5f, 0f), new Vector2(0f, -8f));
 
             // ── Loading group (shown after login) ──
             var loadingGo = MakeGroup(m, "LoadingGroup");
@@ -289,10 +286,13 @@ namespace Game.EditorTools
             ArenaSceneBuilder.SetPrivate(login, "loadingGroup", loadingGroup);
             ArenaSceneBuilder.SetPrivate(login, "termsGroup", termsGroup);
             ArenaSceneBuilder.SetPrivate(login, "particleContainer", particleContainer);
-            ArenaSceneBuilder.SetPrivate(login, "googleButton", googleBtn);
-            ArenaSceneBuilder.SetPrivate(login, "facebookButton", fbBtn);
-            ArenaSceneBuilder.SetPrivate(login, "twitterButton", twitterBtn);
+            ArenaSceneBuilder.SetPrivate(login, "usernameField", userField);
+            ArenaSceneBuilder.SetPrivate(login, "passwordField", passField);
+            ArenaSceneBuilder.SetPrivate(login, "signInButton", signInBtn);
+            ArenaSceneBuilder.SetPrivate(login, "registerButton", registerBtn);
             ArenaSceneBuilder.SetPrivate(login, "guestButton", guestBtn);
+            ArenaSceneBuilder.SetPrivate(login, "errorText", errorText);
+            ArenaSceneBuilder.SetPrivate(login, "offlineNotice", offlineNotice);
             ArenaSceneBuilder.SetPrivate(login, "loadingText", loadingText);
             ArenaSceneBuilder.SetPrivate(login, "percentText", percentText);
             ArenaSceneBuilder.SetPrivate(login, "tapText", tapText);
@@ -335,11 +335,17 @@ namespace Game.EditorTools
             }
             tex.Apply();
 
-            var go = new GameObject("Background", typeof(RectTransform), typeof(RawImage));
+            // A scrim over the jungle rather than a wall in front of it. Opaque, this hid the
+            // backdrop entirely; at 0.66 the trees are still there behind the logo, dark and
+            // out of focus, and the login text stays readable — which is the whole trick.
+            var go = new GameObject("Scrim", typeof(RectTransform), typeof(RawImage));
             go.transform.SetParent(parent, false);
             Stretch(go.GetComponent<RectTransform>());
-            go.GetComponent<RawImage>().texture = tex;
-            go.GetComponent<RawImage>().raycastTarget = false;
+
+            var raw = go.GetComponent<RawImage>();
+            raw.texture = tex;
+            raw.color = new Color(1f, 1f, 1f, 0.66f);
+            raw.raycastTarget = false;
         }
 
         // ── BGM ──
@@ -359,51 +365,109 @@ namespace Game.EditorTools
         }
 
         // ── Icon button with glow border (BGMI style) ──
-        private static Button MakeIconButton(Transform parent, string name, string icon,
-            Color bgColor, Color borderColor, Vector2 pos, float size)
+        /// <summary>
+        /// A text field with a placeholder. TMP_InputField needs three pieces wired by hand —
+        /// the text component, the placeholder, and a viewport to clip against — and it fails
+        /// silently and confusingly if any of them is missing.
+        /// </summary>
+        private static TMP_InputField MakeInput(Transform parent, string name,
+            string placeholder, Vector2 pos, bool password)
         {
-            // Outer glow/border
-            var borderGo = new GameObject(name + "Border", typeof(RectTransform), typeof(Image));
-            borderGo.transform.SetParent(parent, false);
-            var borderRt = borderGo.GetComponent<RectTransform>();
-            borderRt.anchorMin = borderRt.anchorMax = new Vector2(0.5f, 0f);
-            borderRt.anchoredPosition = pos;
-            borderRt.sizeDelta = new Vector2(size + 6f, size + 6f);
-            borderGo.GetComponent<Image>().color = new Color(
-                borderColor.r, borderColor.g, borderColor.b, 0.4f);
-            borderGo.GetComponent<Image>().raycastTarget = false;
-
-            // Main button
-            var go = new GameObject(name + "Btn", typeof(RectTransform),
-                typeof(Image), typeof(Button));
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image),
+                                    typeof(TMP_InputField));
             go.transform.SetParent(parent, false);
 
             var rt = go.GetComponent<RectTransform>();
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
             rt.anchoredPosition = pos;
-            rt.sizeDelta = new Vector2(size, size);
+            rt.sizeDelta = new Vector2(630f, 52f);
 
-            var img = go.GetComponent<Image>();
-            img.color = bgColor;
+            go.GetComponent<Image>().color = new Color(0.10f, 0.09f, 0.08f, 0.95f);
 
-            // Highlight effect
+            // The text area, inset so the caret never touches the edge of the box.
+            var areaGo = new GameObject("TextArea", typeof(RectTransform), typeof(RectMask2D));
+            areaGo.transform.SetParent(go.transform, false);
+            var areaRt = areaGo.GetComponent<RectTransform>();
+            areaRt.anchorMin = Vector2.zero;
+            areaRt.anchorMax = Vector2.one;
+            areaRt.offsetMin = new Vector2(18f, 2f);
+            areaRt.offsetMax = new Vector2(-18f, -2f);
+
+            TMP_Text text = MakeFieldText(areaGo.transform, "Text", "", TextWhite);
+            TMP_Text hint = MakeFieldText(areaGo.transform, "Placeholder", placeholder,
+                                          new Color(0.42f, 0.39f, 0.36f));
+            hint.fontStyle = FontStyles.Italic;
+
+            var input = go.GetComponent<TMP_InputField>();
+            input.textViewport = areaRt;
+            input.textComponent = text;
+            input.placeholder = hint;
+            input.fontAsset = text.font;
+            input.pointSize = 24f;
+            input.caretColor = Gold;
+            input.selectionColor = new Color(Gold.r, Gold.g, Gold.b, 0.3f);
+            input.characterLimit = 24;
+
+            if (password)
+            {
+                input.contentType = TMP_InputField.ContentType.Password;
+                input.asteriskChar = '*';
+            }
+            else
+            {
+                // Not Standard: usernames go into an email on the Firebase path, and a name with
+                // a space in it makes an address that will not resolve.
+                input.contentType = TMP_InputField.ContentType.Alphanumeric;
+            }
+
+            return input;
+        }
+
+        private static TMP_Text MakeFieldText(Transform parent, string name, string content,
+                                              Color color)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            Stretch(go.GetComponent<RectTransform>());
+
+            var tmp = go.AddComponent<TextMeshProUGUI>();
+            tmp.text = content;
+            tmp.fontSize = 24f;
+            tmp.color = color;
+            tmp.alignment = TextAlignmentOptions.Left;
+            tmp.verticalAlignment = VerticalAlignmentOptions.Middle;
+            tmp.raycastTarget = false;
+
+            return tmp;
+        }
+
+        /// <summary>A full-width action button with a label — sign in, register, guest.</summary>
+        private static Button MakeWideButton(Transform parent, string name, string label,
+            Color bgColor, Color textColor, Vector2 pos, float width)
+        {
+            var go = new GameObject(name + "Btn", typeof(RectTransform),
+                                    typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = new Vector2(width, 48f);
+
+            go.GetComponent<Image>().color = bgColor;
+
             var btn = go.GetComponent<Button>();
             var colors = btn.colors;
-            colors.highlightedColor = new Color(1.2f, 1.2f, 1.2f);
-            colors.pressedColor = new Color(0.7f, 0.7f, 0.7f);
+            colors.highlightedColor = new Color(1.15f, 1.15f, 1.15f);
+            colors.pressedColor = new Color(0.75f, 0.75f, 0.75f);
+            colors.disabledColor = new Color(0.5f, 0.5f, 0.5f, 0.6f);
             btn.colors = colors;
 
-            // Icon text inside
-            var iconGo = new GameObject("Icon", typeof(RectTransform));
-            iconGo.transform.SetParent(go.transform, false);
-            Stretch(iconGo.GetComponent<RectTransform>());
-            var tmp = iconGo.AddComponent<TextMeshProUGUI>();
-            tmp.text = icon;
-            tmp.fontSize = 44;
-            tmp.color = Color.white;
-            tmp.fontStyle = FontStyles.Bold;
-            tmp.alignment = TextAlignmentOptions.Center;
-            tmp.raycastTarget = false;
+            var text = MakeText(go.transform, name + "Label", label, 22, textColor,
+                                new Vector2(0.5f, 0.5f), Vector2.zero);
+            text.fontStyle = FontStyles.Bold;
+            text.characterSpacing = 6f;
+            text.rectTransform.sizeDelta = new Vector2(width, 48f);
 
             return btn;
         }

@@ -28,11 +28,19 @@ namespace Game.UI
         [Header("Particles")]
         [SerializeField] private RectTransform particleContainer;
 
-        [Header("Buttons")]
-        [SerializeField] private Button googleButton;
-        [SerializeField] private Button facebookButton;
-        [SerializeField] private Button twitterButton;
+        [Header("Sign in")]
+        [SerializeField] private TMP_InputField usernameField;
+        [SerializeField] private TMP_InputField passwordField;
+        [SerializeField] private Button signInButton;
+        [SerializeField] private Button registerButton;
         [SerializeField] private Button guestButton;
+
+        [Tooltip("Where a rejected login says why.")]
+        [SerializeField] private TMP_Text errorText;
+
+        [Tooltip("Shown when there is no auth backend compiled in, so nobody mistakes the " +
+                 "local account store for a real one.")]
+        [SerializeField] private TMP_Text offlineNotice;
 
         [Header("Loading")]
         [SerializeField] private TMP_Text loadingText;
@@ -51,6 +59,16 @@ namespace Game.UI
         private bool _loggedIn;
         private bool _transitioning;
         private bool _introDone;
+        private bool _busy;          // an auth attempt is in flight
+
+        /// <summary>
+        /// Set only once the tap prompt is actually on screen. Not the same thing as _loggedIn,
+        /// which goes true on the first line of the loading sequence — three seconds and a whole
+        /// loading presentation before there is anything inviting a tap. Gating the tap handler
+        /// on _loggedIn meant any stray touch in that window silently skipped the lot.
+        /// </summary>
+        private bool _awaitingTap;
+
         private Image[] _particles;
 
         /// <summary>The island, loading in the background. Started the moment the player picks
@@ -69,12 +87,24 @@ namespace Game.UI
             CreateParticles();
             StartCoroutine(IntroSequence());
 
-            Debug.Log("[Login] Started - fading in...");
+            if (signInButton != null) signInButton.onClick.AddListener(OnSignIn);
+            if (registerButton != null) registerButton.onClick.AddListener(OnRegister);
+            if (guestButton != null) guestButton.onClick.AddListener(OnGuest);
 
-            if (googleButton != null) googleButton.onClick.AddListener(() => OnLogin("Google"));
-            if (facebookButton != null) facebookButton.onClick.AddListener(() => OnLogin("Facebook"));
-            if (twitterButton != null) twitterButton.onClick.AddListener(() => OnLogin("Twitter"));
-            if (guestButton != null) guestButton.onClick.AddListener(() => OnLogin("Guest"));
+            if (errorText != null) errorText.text = "";
+
+            // Say so rather than letting it pass for the real thing. There is no server behind
+            // this build, and a login screen that quietly accepts anything is worse than one
+            // that admits what it is.
+            if (offlineNotice != null)
+            {
+                offlineNotice.gameObject.SetActive(!Game.Core.AuthService.IsLive);
+                offlineNotice.text = "OFFLINE MODE — accounts are stored on this device only";
+            }
+
+            // Come back to the name they used last. Only the name; never the password.
+            if (usernameField != null)
+                usernameField.text = PlayerPrefs.GetString("PlayerName", "");
         }
 
         private void Update()
@@ -82,8 +112,9 @@ namespace Game.UI
             AnimateParticles();
             AnimateTitle();
 
-            // Tap to continue after logged in
-            if (_loggedIn && !_transitioning)
+            // A tap only means "enter the game" once the screen has asked for one. Before that
+            // it means nothing, because the player is watching a loading bar.
+            if (_awaitingTap && !_transitioning)
             {
                 if (tapText != null)
                     tapText.alpha = 0.5f + 0.5f * Mathf.Sin(Time.time * 3f);
@@ -138,20 +169,69 @@ namespace Game.UI
 
         // ────────────────────── Login ──────────────────────
 
-        private void OnLogin(string method)
+        private void OnSignIn() => Attempt(done =>
+            Game.Core.AuthService.SignIn(Username, Password, done), "Password");
+
+        private void OnRegister() => Attempt(done =>
+            Game.Core.AuthService.Register(Username, Password, done), "Password");
+
+        private void OnGuest() => Attempt(
+            Game.Core.AuthService.SignInAsGuest, "Guest");
+
+        private string Username => usernameField != null ? usernameField.text.Trim() : "";
+        private string Password => passwordField != null ? passwordField.text : "";
+
+        /// <summary>
+        /// Runs an auth attempt and, only if it succeeds, hands off to the loading sequence. A
+        /// rejection puts the reason on screen and leaves the player exactly where they were,
+        /// with what they typed still in the fields — retyping a username because the password
+        /// was wrong is the kind of thing that makes people close a game.
+        /// </summary>
+        private void Attempt(System.Func<System.Action<Game.Core.AuthService.Result>, IEnumerator>
+                             attempt, string method)
         {
-            if (_loggedIn || _transitioning) return;
+            if (_busy || _loggedIn || _transitioning) return;
+            StartCoroutine(AttemptRoutine(attempt, method));
+        }
+
+        private IEnumerator AttemptRoutine(
+            System.Func<System.Action<Game.Core.AuthService.Result>, IEnumerator> attempt,
+            string method)
+        {
+            _busy = true;
             PlayClick();
 
-            string playerName = method == "Guest"
-                ? "Soldier_" + Random.Range(1000, 9999)
-                : method + "_Player";
+            if (errorText != null) errorText.text = "";
+            SetInteractable(false);
 
-            PlayerPrefs.SetString("PlayerName", playerName);
+            var result = default(Game.Core.AuthService.Result);
+            yield return attempt(r => result = r);
+
+            if (!result.Success)
+            {
+                if (errorText != null) errorText.text = result.Error;
+                SetInteractable(true);
+                _busy = false;
+                yield break;
+            }
+
+            PlayerPrefs.SetString("PlayerName", result.DisplayName);
             PlayerPrefs.SetString("LoginMethod", method);
             PlayerPrefs.Save();
 
-            StartCoroutine(LoginSequence(method, playerName));
+            yield return LoginSequence(method, result.DisplayName);
+            _busy = false;
+        }
+
+        /// <summary>Locks the form while an attempt is in flight, so a second tap cannot start
+        /// a second one on top of the first.</summary>
+        private void SetInteractable(bool on)
+        {
+            if (usernameField != null) usernameField.interactable = on;
+            if (passwordField != null) passwordField.interactable = on;
+            if (signInButton != null) signInButton.interactable = on;
+            if (registerButton != null) registerButton.interactable = on;
+            if (guestButton != null) guestButton.interactable = on;
         }
 
         private IEnumerator LoginSequence(string method, string playerName)
@@ -200,6 +280,9 @@ namespace Game.UI
                 tapText.gameObject.SetActive(true);
                 tapText.alpha = 0f;
             }
+
+            // Now, and not before: the prompt is up, so a tap has something to mean.
+            _awaitingTap = true;
         }
 
         private void BeginLoad()
