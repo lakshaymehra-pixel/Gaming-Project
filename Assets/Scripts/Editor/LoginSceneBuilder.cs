@@ -172,53 +172,71 @@ namespace Game.EditorTools
             stripGo.GetComponent<Image>().color = BottomBar;
             stripGo.GetComponent<Image>().raycastTarget = false;
 
-            // "Select login method" text
+            // Text sizes here are in a 1920x1080 reference space, so they are roughly half what
+            // they look like on a phone held at arm's length. The old 16px labels came out at
+            // about 3mm tall on a handset — legible on a monitor, not on the thing this ships to.
             MakeText(bottomGo.transform, "SelectLabel",
-                "SELECT LOGIN METHOD", 20,
-                TextDim, new Vector2(0.5f, 0f), new Vector2(0f, 280f));
+                "SELECT LOGIN METHOD", 26,
+                TextDim, new Vector2(0.5f, 0f), new Vector2(0f, 288f));
 
-            // Login buttons - horizontal row (BGMI style, larger with glow borders)
-            float btnY = 195f;
-            float btnSize = 100f;
-            float spacing = 150f;
+            // Login buttons — one row, BGMI style.
+            float btnY = 190f;
+            float btnSize = 118f;
+            float spacing = 175f;
             float startX = -spacing * 1.5f;
 
             Button googleBtn = MakeIconButton(bottomGo.transform, "Google", "G",
                 BtnGoogle, Gold, new Vector2(startX, btnY), btnSize);
-            MakeText(bottomGo.transform, "GoogleLabel", "Google", 16,
-                TextWhite, new Vector2(0.5f, 0f), new Vector2(startX, btnY - 65f));
+            MakeText(bottomGo.transform, "GoogleLabel", "GOOGLE", 22,
+                TextWhite, new Vector2(0.5f, 0f), new Vector2(startX, btnY - 78f));
 
             Button fbBtn = MakeIconButton(bottomGo.transform, "Facebook", "f",
                 BtnFacebook, Gold, new Vector2(startX + spacing, btnY), btnSize);
-            MakeText(bottomGo.transform, "FBLabel", "Facebook", 16,
-                TextWhite, new Vector2(0.5f, 0f), new Vector2(startX + spacing, btnY - 65f));
+            MakeText(bottomGo.transform, "FBLabel", "FACEBOOK", 22,
+                TextWhite, new Vector2(0.5f, 0f), new Vector2(startX + spacing, btnY - 78f));
 
             Button twitterBtn = MakeIconButton(bottomGo.transform, "Twitter", "X",
                 BtnTwitter, Gold, new Vector2(startX + spacing * 2, btnY), btnSize);
-            MakeText(bottomGo.transform, "TwitterLabel", "Twitter", 16,
-                TextWhite, new Vector2(0.5f, 0f), new Vector2(startX + spacing * 2, btnY - 65f));
+            MakeText(bottomGo.transform, "TwitterLabel", "TWITTER", 22,
+                TextWhite, new Vector2(0.5f, 0f), new Vector2(startX + spacing * 2, btnY - 78f));
 
             Button guestBtn = MakeIconButton(bottomGo.transform, "Guest", "?",
                 BtnGuest, Gold, new Vector2(startX + spacing * 3, btnY), btnSize);
-            MakeText(bottomGo.transform, "GuestLabel", "Guest", 16,
-                TextWhite, new Vector2(0.5f, 0f), new Vector2(startX + spacing * 3, btnY - 65f));
+            MakeText(bottomGo.transform, "GuestLabel", "GUEST", 22,
+                TextWhite, new Vector2(0.5f, 0f), new Vector2(startX + spacing * 3, btnY - 78f));
 
             // ── Loading group (shown after login) ──
             var loadingGo = MakeGroup(m, "LoadingGroup");
             var loadingGroup = loadingGo.GetComponent<CanvasGroup>();
             loadingGroup.alpha = 0f;
 
+            // Stage label on the left of the bar, percentage on the right — the download-screen
+            // layout, and the percentage is the part people actually read.
+            // The bar sits where the buttons were — they fade out as it fades in, so the eye
+            // stays in one place through the handover instead of being sent somewhere new.
+            const float barY = 210f;
+
             var loadingText = MakeText(loadingGo.transform, "LoadingText",
-                "Connecting...", 24, TextWhite,
-                new Vector2(0.5f, 0f), new Vector2(0f, 250f));
+                "CONNECTING", 26, TextWhite,
+                new Vector2(0.5f, 0f), new Vector2(-300f, barY + 40f));
+            loadingText.alignment = TextAlignmentOptions.Left;
+            loadingText.characterSpacing = 8f;
+            loadingText.rectTransform.sizeDelta = new Vector2(600f, 44f);
+
+            var percentText = MakeText(loadingGo.transform, "PercentText",
+                "0%", 30, Gold,
+                new Vector2(0.5f, 0f), new Vector2(300f, barY + 40f));
+            percentText.alignment = TextAlignmentOptions.Right;
+            percentText.fontStyle = FontStyles.Bold;
+            percentText.rectTransform.sizeDelta = new Vector2(600f, 44f);
 
             // Loading bar track
             var trackGo = new GameObject("LoadingTrack", typeof(RectTransform), typeof(Image));
             trackGo.transform.SetParent(loadingGo.transform, false);
             var trackRt = trackGo.GetComponent<RectTransform>();
             trackRt.anchorMin = trackRt.anchorMax = new Vector2(0.5f, 0f);
-            trackRt.anchoredPosition = new Vector2(0f, 210f);
-            trackRt.sizeDelta = new Vector2(600f, 6f);
+            trackRt.anchoredPosition = new Vector2(0f, barY);
+            trackRt.sizeDelta = new Vector2(900f, 10f);
             trackGo.GetComponent<Image>().color = BarBg;
             trackGo.GetComponent<Image>().raycastTarget = false;
 
@@ -234,11 +252,13 @@ namespace Game.EditorTools
             fillImg.fillAmount = 0f;
             fillImg.raycastTarget = false;
 
-            // "Tap to continue" (hidden initially)
+            // "Tap to continue" — below the bar, not on top of the stage label, which is where
+            // it used to sit: both were anchored at y=250 and drew over each other.
             var tapText = MakeText(loadingGo.transform, "TapText",
-                "TAP TO CONTINUE", 28, Gold,
-                new Vector2(0.5f, 0f), new Vector2(0f, 250f));
-            tapText.characterSpacing = 12f;
+                "TAP TO ENTER THE NIGHT", 32, Gold,
+                new Vector2(0.5f, 0f), new Vector2(0f, barY - 60f));
+            tapText.characterSpacing = 14f;
+            tapText.fontStyle = FontStyles.Bold;
             tapText.gameObject.SetActive(false);
 
             // ── Terms group ──
@@ -248,7 +268,7 @@ namespace Game.EditorTools
 
             MakeText(termsGo.transform, "Terms",
                 "By continuing you agree to our Terms of Service & Privacy Policy",
-                12, TextDim, new Vector2(0.5f, 0f), new Vector2(0f, 25f));
+                18, TextDim, new Vector2(0.5f, 0f), new Vector2(0f, 30f));
 
             // ── Wire LoginScreen ──
             var login = canvasGo.AddComponent<LoginScreen>();
@@ -263,6 +283,7 @@ namespace Game.EditorTools
             ArenaSceneBuilder.SetPrivate(login, "twitterButton", twitterBtn);
             ArenaSceneBuilder.SetPrivate(login, "guestButton", guestBtn);
             ArenaSceneBuilder.SetPrivate(login, "loadingText", loadingText);
+            ArenaSceneBuilder.SetPrivate(login, "percentText", percentText);
             ArenaSceneBuilder.SetPrivate(login, "tapText", tapText);
             ArenaSceneBuilder.SetPrivate(login, "loadingBar", fillImg);
             ArenaSceneBuilder.SetPrivate(login, "nextSceneName", "Island");
