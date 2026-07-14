@@ -581,13 +581,22 @@ namespace Game.UI
         private void BeginLoad()
         {
             if (Application.CanStreamedLevelBeLoaded(nextSceneName))
+            {
                 _load = SceneManager.LoadSceneAsync(nextSceneName);
+            }
             else if (SceneManager.sceneCountInBuildSettings > 1)
+            {
+                // Whatever scene is next in the build settings. Falling through to the game
+                // beats stranding the player on a splash that loads nothing, and this is the
+                // path taken when the Login scene has not been built yet.
+                Debug.LogWarning($"Splash: '{nextSceneName}' is not in the build settings — " +
+                                 "falling back to the next scene. Run Game > Build Login Scene.");
                 _load = SceneManager.LoadSceneAsync(1);
+            }
             else
             {
-                Debug.LogWarning("Splash: no next scene found in build settings. " +
-                                 "Build the Island scene (Game > Build Island Scene).");
+                Debug.LogWarning("Splash: no next scene in the build settings at all. " +
+                                 "Run Game > Build Island Scene, then Build Login Scene.");
                 return;
             }
 

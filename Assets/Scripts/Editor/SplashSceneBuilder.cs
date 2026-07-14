@@ -177,15 +177,21 @@ namespace Game.EditorTools
             WireClip(controller, "gunBurstClip", "Assets/Audio/SFX_GunBurst.mp3",
                      "Assets/Audio/SFX_Fire.wav");
             WireClip(controller, "explosionClip", "Assets/Audio/SFX_Explosion.mp3", null);
-            WireClip(controller, "roarClip", "Assets/Audio/AMB_Roar.wav", null);
+
+            // Real roar, synth as the fallback. Three of these carry the whole first half of
+            // the sequence — each one closer and pitched lower than the last — so this is the
+            // clip most worth having a real recording of.
+            WireClip(controller, "roarClip", "Assets/Audio/AMB_Roar_Real.mp3",
+                     "Assets/Audio/AMB_Roar.wav");
+
             WireClip(controller, "tickClip", "Assets/Audio/SFX_Empty.wav", null);
 
             ArenaSceneBuilder.SaveSceneChecked(scene, ScenePath);
             ArenaSceneBuilder.AddSceneToBuildSettings(ScenePath);
 
-            Debug.Log($"<b>Splash built.</b> Saved to {ScenePath}. It boots first and " +
-                      "loads the Island behind the sequence — make sure the Island scene " +
-                      "is built too, and turn the sound on.");
+            Debug.Log($"<b>Splash built.</b> Saved to {ScenePath}. Boots first, runs the " +
+                      "intro, then hands off to Login. Build the Island and Login scenes " +
+                      "too, and turn the sound on.");
         }
 
         private static void SetHoles(SplashController controller, RectTransform[] holes)
