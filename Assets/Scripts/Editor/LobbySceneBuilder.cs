@@ -76,10 +76,32 @@ namespace Game.EditorTools
 
             var lobby = canvas.gameObject.AddComponent<LobbyScreen>();
 
-            BuildPlayerCard(c, lobby);
-            BuildMaps(c, lobby);
-            BuildPlayPanel(c, lobby);
-            BuildTopRight(c, lobby);
+            // ── The floating clusters, corner-anchored the way the web mockup lays them out.
+            //    The middle stays the soldier; every control hugs an edge. Built in this order
+            //    so later siblings draw on top — decorative panels first, live buttons after.
+
+            // Top-left: who you are.
+            BuildPlayerCard(c, lobby);   // player card + stat row
+            BuildLoadoutStrip(c);        // PRIMARY / SECONDARY / MELEE (decorative)
+            BuildTeamUp(c);              // TEAM UP (decorative)
+
+            // Top-centre: the small doors (decorative).
+            BuildTopCentre(c);
+
+            // Top-right: what you own (decorative) + the live settings/sign-out buttons.
+            BuildCurrencyBar(c);
+            BuildRailButtons(c);         // RP / CRATE / SHOP (decorative)
+            BuildPromoBanners(c);        // KAAL PASS + EVENTS (decorative)
+            BuildTopRight(c, lobby);     // settings + sign out (live)
+
+            // Bottom-left: mode card, the two real map buttons, and DEPLOY.
+            BuildModeAndMaps(c, lobby);  // mode label + mapA/mapB buttons (live)
+            BuildPlayPanel(c, lobby);    // DEPLOY + loading block (live)
+
+            // Bottom-centre: squad + chat (decorative).
+            BuildSquadBar(c);
+            BuildChatStrip(c);
+
             BuildLevelUpBanner(c, lobby);
             BuildSettings(c, lobby);
 
@@ -396,81 +418,92 @@ namespace Game.EditorTools
             ArenaSceneBuilder.SetPrivate(character, "animator", animator);
         }
 
+        // ---------------------------------------------------------------- palette add-ons
+
+        // The web mockup's translucent-black panel over the crimson scene, and its thin gold
+        // border drawn as a slightly larger rect behind the fill. One helper so every floating
+        // panel in the lobby reads as one material.
+        private static readonly Color PanelBlack = new(0.02f, 0.01f, 0.01f, 0.62f);
+        private static readonly Color BorderGold = new(0.92f, 0.72f, 0.15f, 0.25f);   // gold/25
+        private static readonly Color BorderInk = new(0.28f, 0.25f, 0.22f, 0.6f);     // ink-700/60
+
+        /// <summary>
+        /// A floating panel: a translucent black body with a thin border drawn as a 2px-larger
+        /// rect behind it. Returns the body's transform to parent children onto. The border is
+        /// the first sibling so the body covers all but its rim.
+        /// </summary>
+        private static Transform Panel(Transform parent, string name, Vector2 anchor,
+            Vector2 pos, Vector2 size, Color? border = null)
+        {
+            UiKit.MakeRect(parent, name + "Border", border ?? BorderGold,
+                anchor, pos, size + new Vector2(4f, 4f));
+
+            Image body = UiKit.MakeRect(parent, name, PanelBlack, anchor, pos, size);
+            return body.transform;
+        }
+
         // ---------------------------------------------------------------- player card
 
         /// <summary>
-        /// The profile panel, down the left. One card with everything inside it and a gold rule
-        /// down its edge — the old version was six loose elements floating on the jungle, which
-        /// is why it read as a form rather than as a card.
+        /// Top-left: who you are. A small card — hex-less square avatar, name, a gold LVL badge,
+        /// and a thin XP bar — matching the web mockup's PlayerCard. A tiny stat row (kills /
+        /// matches / best wave) hangs under it: the web card does not show these, but the Unity
+        /// LobbyScreen fills them from PlayerProfile, so they stay, small, rather than go unwired.
         /// </summary>
         private static void BuildPlayerCard(Transform parent, LobbyScreen lobby)
         {
             var anchor = new Vector2(0f, 1f);   // top-left
-
-            // The card. Everything below is a child of this, so it moves as one thing.
-            var cardGo = new GameObject("PlayerCard", typeof(RectTransform), typeof(Image));
-            cardGo.transform.SetParent(parent, false);
-
-            var cardRt = cardGo.GetComponent<RectTransform>();
-            cardRt.anchorMin = cardRt.anchorMax = anchor;
-            cardRt.anchoredPosition = new Vector2(300f, -195f);
-            cardRt.sizeDelta = new Vector2(520f, 310f);
-
-            // Blacker and more translucent than before, so the crimson scene glows through the
-            // edges of the panel instead of the panel being a solid slab on top of it.
-            var cardImage = cardGo.GetComponent<Image>();
-            cardImage.color = new Color(0.02f, 0.01f, 0.01f, 0.62f);
-            cardImage.raycastTarget = false;
-
-            Transform card = cardGo.transform;
             var mid = new Vector2(0.5f, 0.5f);
 
-            // A gold rule down the left edge. One line, and the card stops being a grey box.
-            UiKit.MakeRect(card, "Accent", UiKit.Gold, new Vector2(0f, 0.5f),
-                new Vector2(3f, 0f), new Vector2(6f, 310f));
+            // The card body. Compact, hugging the corner. Children are parented to it.
+            Transform card = Panel(parent, "PlayerCard", anchor,
+                new Vector2(200f, -70f), new Vector2(360f, 100f));
 
-            // Avatar. A colour derived from the name with the initial on it — there is no
-            // portrait art and no pipeline to make any, and a placeholder that admits what it is
-            // beats a stock face pulled off the web.
-            Image avatar = UiKit.MakeRect(card, "Avatar", new Color(0.3f, 0.3f, 0.3f),
-                mid, new Vector2(-170f, 78f), new Vector2(116f, 116f));
-
+            // Avatar: a colour derived from the name, initial on top, thin gold frame behind.
+            // uGUI has no clip-path, so the web's hexagon is approximated by the square avatar
+            // that is already wired — restyled a touch smaller to fit the compact card.
             UiKit.MakeRect(card, "AvatarFrame", new Color(0.55f, 0.42f, 0.10f, 0.6f),
-                mid, new Vector2(-170f, 78f), new Vector2(124f, 124f))
-                .transform.SetSiblingIndex(1);   // behind the avatar, showing as a border
+                mid, new Vector2(-138f, 0f), new Vector2(80f, 80f));
 
-            TMP_Text initial = UiKit.MakeText(card, "AvatarInitial", "S", 56f,
-                UiKit.TextWhite, mid, new Vector2(-170f, 78f));
+            Image avatar = UiKit.MakeRect(card, "Avatar", new Color(0.3f, 0.3f, 0.3f),
+                mid, new Vector2(-138f, 0f), new Vector2(72f, 72f));
+
+            TMP_Text initial = UiKit.MakeText(card, "AvatarInitial", "S", 40f,
+                UiKit.TextWhite, mid, new Vector2(-138f, 0f));
             initial.fontStyle = FontStyles.Bold;
 
-            TMP_Text name = UiKit.MakeText(card, "PlayerName", "SOLDIER", 32f,
-                UiKit.TextWhite, mid, new Vector2(60f, 104f));
+            // Name, with a gold LVL badge to its right.
+            TMP_Text name = UiKit.MakeText(card, "PlayerName", "SOLDIER", 24f,
+                UiKit.TextWhite, mid, new Vector2(10f, 26f));
             name.alignment = TextAlignmentOptions.Left;
             name.fontStyle = FontStyles.Bold;
-            name.rectTransform.sizeDelta = new Vector2(300f, 42f);
+            name.rectTransform.sizeDelta = new Vector2(180f, 30f);
 
-            TMP_Text level = UiKit.MakeText(card, "PlayerLevel", "LVL 1", 22f,
-                UiKit.Gold, mid, new Vector2(60f, 68f));
-            level.alignment = TextAlignmentOptions.Left;
-            level.characterSpacing = 6f;
-            level.rectTransform.sizeDelta = new Vector2(300f, 30f);
+            // The LVL badge: a small gold chip carrying the level number.
+            UiKit.MakeRect(card, "LevelBadge", UiKit.Gold,
+                mid, new Vector2(128f, 26f), new Vector2(52f, 24f));
+            TMP_Text level = UiKit.MakeText(card, "PlayerLevel", "1", 18f,
+                new Color(0.08f, 0.05f, 0.02f), mid, new Vector2(128f, 26f));
+            level.fontStyle = FontStyles.Bold;
+            level.rectTransform.sizeDelta = new Vector2(52f, 24f);
 
+            // A thin XP bar under the name.
             Image xpBar = UiKit.MakeBar(card, "Xp", UiKit.Gold,
-                mid, new Vector2(60f, 38f), new Vector2(290f, 10f));
+                mid, new Vector2(46f, -2f), new Vector2(280f, 6f));
 
-            TMP_Text xp = UiKit.MakeText(card, "XpText", "0 / 500 XP", 16f,
-                UiKit.TextDim, mid, new Vector2(60f, 16f));
+            TMP_Text xp = UiKit.MakeText(card, "XpText", "0 / 500 XP", 13f,
+                UiKit.TextDim, mid, new Vector2(46f, -22f));
             xp.alignment = TextAlignmentOptions.Left;
-            xp.rectTransform.sizeDelta = new Vector2(290f, 22f);
+            xp.rectTransform.sizeDelta = new Vector2(280f, 20f);
 
-            // A divider, then the stats. The line is what makes them a second section rather
-            // than more of the same.
-            UiKit.MakeRect(card, "Divider", new Color(1f, 1f, 1f, 0.08f),
-                mid, new Vector2(0f, -22f), new Vector2(460f, 2f));
+            // The stat row, in a slim strip below the card. Not in the web mockup, but the Unity
+            // profile fills these, so they live here small rather than go unwired.
+            Transform stats = Panel(parent, "StatRow", anchor,
+                new Vector2(200f, -142f), new Vector2(360f, 44f), BorderInk);
 
-            TMP_Text kills = Stat(card, "Kills", "KILLS", new Vector2(-150f, -78f));
-            TMP_Text matches = Stat(card, "Matches", "MATCHES", new Vector2(0f, -78f));
-            TMP_Text wave = Stat(card, "BestWave", "BEST WAVE", new Vector2(150f, -78f));
+            TMP_Text kills = Stat(stats, "Kills", "KILLS", new Vector2(-118f, 0f));
+            TMP_Text matches = Stat(stats, "Matches", "MATCHES", new Vector2(0f, 0f));
+            TMP_Text wave = Stat(stats, "BestWave", "BEST WAVE", new Vector2(118f, 0f));
 
             ArenaSceneBuilder.SetPrivate(lobby, "avatar", avatar);
             ArenaSceneBuilder.SetPrivate(lobby, "avatarInitial", initial);
@@ -483,48 +516,309 @@ namespace Game.EditorTools
             ArenaSceneBuilder.SetPrivate(lobby, "bestWaveText", wave);
         }
 
-        /// <summary>One stat: the number, and the word under it. Returns the number, which is the
-        /// only part anything ever sets — and the only part anyone actually reads.</summary>
+        /// <summary>One stat in the slim row: number left of centre, caption right of it. Returns
+        /// the number, which is the only part anything ever sets.</summary>
         private static TMP_Text Stat(Transform parent, string name, string label, Vector2 pos)
         {
             var anchor = new Vector2(0.5f, 0.5f);
 
-            TMP_Text value = UiKit.MakeText(parent, name + "Value", "0", 34f,
-                UiKit.TextWhite, anchor, pos);
+            TMP_Text value = UiKit.MakeText(parent, name + "Value", "0", 20f,
+                UiKit.TextWhite, anchor, pos + new Vector2(-20f, 0f));
             value.fontStyle = FontStyles.Bold;
-            value.rectTransform.sizeDelta = new Vector2(150f, 40f);
+            value.alignment = TextAlignmentOptions.Right;
+            value.rectTransform.sizeDelta = new Vector2(40f, 26f);
 
-            TMP_Text caption = UiKit.MakeText(parent, name + "Label", label, 13f,
-                UiKit.TextDim, anchor, pos + new Vector2(0f, -28f));
-            caption.characterSpacing = 5f;
-            caption.rectTransform.sizeDelta = new Vector2(150f, 22f);
+            TMP_Text caption = UiKit.MakeText(parent, name + "Label", label, 9f,
+                UiKit.TextDim, anchor, pos + new Vector2(24f, 0f));
+            caption.characterSpacing = 2f;
+            caption.alignment = TextAlignmentOptions.Left;
+            caption.rectTransform.sizeDelta = new Vector2(72f, 22f);
 
             return value;
         }
 
-        // ----------------------------------------------------------------------- maps
+        // ------------------------------------------------------------------ loadout strip
 
         /// <summary>
-        /// The maps, stacked down the right. Not across the middle any more — the middle is where
-        /// the soldier stands, and a lobby that puts a menu in front of its own character has
-        /// misunderstood what the character is for.
+        /// Top-left, under the player card: the three loadout slots a shooter always shows —
+        /// PRIMARY (filled, M-91), SECONDARY and MELEE (empty, dashed). Decorative: the game has
+        /// one weapon, so nothing here is wired. The empty slots use the ink border to read as
+        /// empty rather than borrowed.
         /// </summary>
-        private static void BuildMaps(Transform parent, LobbyScreen lobby)
+        private static void BuildLoadoutStrip(Transform parent)
         {
-            var anchor = new Vector2(1f, 0.5f);   // right edge
+            var anchor = new Vector2(0f, 1f);
+            Transform strip = Panel(parent, "LoadoutStrip", anchor,
+                new Vector2(200f, -196f), new Vector2(360f, 60f), BorderInk);
 
-            TMP_Text heading = UiKit.MakeText(parent, "MapsHeading", "SELECT MAP", 20f,
-                UiKit.TextDim, anchor, new Vector2(-230f, 220f));
-            heading.characterSpacing = 8f;
-            heading.rectTransform.sizeDelta = new Vector2(400f, 30f);
+            LoadoutSlot(strip, "Primary", "M-91", true, new Vector2(-118f, 0f));
+            LoadoutSlot(strip, "Secondary", "—", false, new Vector2(0f, 0f));
+            LoadoutSlot(strip, "Melee", "—", false, new Vector2(118f, 0f));
+        }
 
-            (Button btn, Image outline, TMP_Text status) a = MapCard(parent, "MapA",
-                "ISLAND", "400m jungle island. Dense cover, short sight lines.",
-                new Color(0.10f, 0.22f, 0.12f), anchor, new Vector2(-230f, 100f));
+        private static void LoadoutSlot(Transform parent, string name, string label,
+            bool filled, Vector2 pos)
+        {
+            var mid = new Vector2(0.5f, 0.5f);
 
-            (Button btn, Image outline, TMP_Text status) b = MapCard(parent, "MapB",
-                "ARENA", "Walled box with hard cover. Fast rounds.",
-                new Color(0.20f, 0.18f, 0.15f), anchor, new Vector2(-230f, -80f));
+            // The slot tile — a warmer ink for filled, near-black for empty, with a dim border.
+            UiKit.MakeRect(parent, name + "Border", filled ? UiKit.GoldDim : BorderInk,
+                mid, pos, new Vector2(108f, 46f));
+            UiKit.MakeRect(parent, name + "Tile",
+                filled ? new Color(0.12f, 0.11f, 0.09f, 0.9f)
+                       : new Color(0.03f, 0.03f, 0.03f, 0.6f),
+                mid, pos, new Vector2(104f, 42f));
+
+            TMP_Text text = UiKit.MakeText(parent, name + "Label", label, 13f,
+                filled ? UiKit.Gold : UiKit.TextDim, mid, pos + new Vector2(0f, -12f));
+            text.fontStyle = FontStyles.Bold;
+            text.characterSpacing = 3f;
+            text.rectTransform.sizeDelta = new Vector2(104f, 18f);
+
+            TMP_Text slot = UiKit.MakeText(parent, name + "Slot", name.ToUpperInvariant(), 8f,
+                UiKit.TextDim, mid, pos + new Vector2(0f, 8f));
+            slot.characterSpacing = 2f;
+            slot.rectTransform.sizeDelta = new Vector2(104f, 14f);
+        }
+
+        // --------------------------------------------------------------------- team up
+
+        /// <summary>Top-left, under the loadout: a TEAM UP button. Decorative — there is no
+        /// multiplayer, so it is not wired to anything.</summary>
+        private static void BuildTeamUp(Transform parent)
+        {
+            var anchor = new Vector2(0f, 1f);
+            Transform bar = Panel(parent, "TeamUp", anchor,
+                new Vector2(200f, -246f), new Vector2(360f, 36f));
+
+            TMP_Text label = UiKit.MakeText(bar, "TeamUpLabel", "TEAM UP", 15f,
+                UiKit.TextWhite, new Vector2(0.5f, 0.5f), Vector2.zero);
+            label.fontStyle = FontStyles.Bold;
+            label.characterSpacing = 8f;
+        }
+
+        // ------------------------------------------------------------------ top centre
+
+        /// <summary>
+        /// Top-centre: a row of small square doors — mail, missions, an "S1 · 18d" season timer,
+        /// and sound. All decorative; none is wired. Centred on the top edge so it clears the
+        /// KAAL RAAT watermark below it.
+        /// </summary>
+        private static void BuildTopCentre(Transform parent)
+        {
+            var anchor = new Vector2(0.5f, 1f);
+            float y = -46f;
+
+            IconSquare(parent, "Mail", "MAIL", new Vector2(-140f, y), false);
+            IconSquare(parent, "Missions", "MSN", new Vector2(-88f, y), false);
+            IconSquare(parent, "Timer", "S1 · 18d", new Vector2(0f, y), true);
+            IconSquare(parent, "Sound", "SND", new Vector2(88f, y), false);
+        }
+
+        private static void IconSquare(Transform parent, string name, string label,
+            Vector2 pos, bool wide)
+        {
+            var anchor = new Vector2(0.5f, 1f);
+            var size = wide ? new Vector2(120f, 40f) : new Vector2(40f, 40f);
+
+            UiKit.MakeRect(parent, name + "Border", BorderGold, anchor, pos,
+                size + new Vector2(4f, 4f));
+            UiKit.MakeRect(parent, name + "Sq", PanelBlack, anchor, pos, size);
+
+            TMP_Text text = UiKit.MakeText(parent, name + "Label", label, wide ? 13f : 10f,
+                wide ? UiKit.TextWhite : UiKit.TextDim, anchor, pos);
+            text.characterSpacing = 2f;
+            text.rectTransform.sizeDelta = size;
+        }
+
+        // ----------------------------------------------------------------- currency bar
+
+        /// <summary>
+        /// Top-right: the two currency pills — 💎 shards and 🪙 scrip — each with a gold "+"
+        /// chip. Right-aligned to the corner. Decorative: the game has no economy, so nothing
+        /// here is wired.
+        /// </summary>
+        private static void BuildCurrencyBar(Transform parent)
+        {
+            var anchor = new Vector2(1f, 1f);   // top-right
+            CurrencyPill(parent, "Shards", "2,480", new Color(0.4f, 0.85f, 0.95f),
+                new Vector2(-360f, -44f));
+            CurrencyPill(parent, "Scrip", "15,200", UiKit.Gold,
+                new Vector2(-170f, -44f));
+        }
+
+        private static void CurrencyPill(Transform parent, string name, string value,
+            Color dot, Vector2 pos)
+        {
+            var anchor = new Vector2(1f, 1f);
+            var size = new Vector2(160f, 36f);
+
+            UiKit.MakeRect(parent, name + "Border", BorderGold, anchor, pos,
+                size + new Vector2(4f, 4f));
+            UiKit.MakeRect(parent, name + "Pill", PanelBlack, anchor, pos, size);
+
+            // The coloured token that stands in for the 💎 / 🪙 glyph.
+            UiKit.MakeRect(parent, name + "Dot", dot, anchor,
+                pos + new Vector2(-64f, 0f), new Vector2(16f, 16f));
+
+            TMP_Text text = UiKit.MakeText(parent, name + "Value", value, 15f,
+                UiKit.TextWhite, anchor, pos + new Vector2(2f, 0f));
+            text.alignment = TextAlignmentOptions.Left;
+            text.rectTransform.sizeDelta = new Vector2(110f, 24f);
+
+            // The gold "+" chip on the right end of the pill.
+            UiKit.MakeRect(parent, name + "Plus", UiKit.Gold, anchor,
+                pos + new Vector2(64f, 0f), new Vector2(28f, 34f));
+            TMP_Text plus = UiKit.MakeText(parent, name + "PlusLabel", "+", 20f,
+                new Color(0.08f, 0.05f, 0.02f), anchor, pos + new Vector2(64f, 0f));
+            plus.fontStyle = FontStyles.Bold;
+            plus.rectTransform.sizeDelta = new Vector2(28f, 34f);
+        }
+
+        // ---------------------------------------------------------------- rail buttons
+
+        /// <summary>
+        /// Top-right, under the currency: a vertical stack of three square buttons — RP, CRATE,
+        /// SHOP. Decorative; none is wired. CRATE carries a small red badge like the web mockup.
+        /// </summary>
+        private static void BuildRailButtons(Transform parent)
+        {
+            var anchor = new Vector2(1f, 1f);
+            RailSquare(parent, "RP", "RP", new Vector2(-60f, -104f), false);
+            RailSquare(parent, "Crate", "CRATE", new Vector2(-60f, -164f), true);
+            RailSquare(parent, "Shop", "SHOP", new Vector2(-60f, -224f), false);
+        }
+
+        private static void RailSquare(Transform parent, string name, string label,
+            Vector2 pos, bool badge)
+        {
+            var anchor = new Vector2(1f, 1f);
+            var size = new Vector2(52f, 52f);
+
+            UiKit.MakeRect(parent, name + "Border", BorderGold, anchor, pos,
+                size + new Vector2(4f, 4f));
+            UiKit.MakeRect(parent, name + "Sq", PanelBlack, anchor, pos, size);
+
+            TMP_Text text = UiKit.MakeText(parent, name + "Label", label, 11f,
+                UiKit.TextDim, anchor, pos);
+            text.fontStyle = FontStyles.Bold;
+            text.characterSpacing = 2f;
+            text.rectTransform.sizeDelta = size;
+
+            // A red unread badge on the corner, like the web mockup's CRATE.
+            if (badge)
+                UiKit.MakeRect(parent, name + "Badge", new Color(0.82f, 0.1f, 0.06f),
+                    anchor, pos + new Vector2(24f, 24f), new Vector2(12f, 12f));
+        }
+
+        // --------------------------------------------------------------- promo banners
+
+        /// <summary>
+        /// Right edge, above the bottom nav: the two banners the web mockup's PromoBanners draws —
+        /// KAAL PASS (tier 22 + a mini progress bar) and EVENTS (with a red "3" badge). Both
+        /// decorative; neither is wired.
+        /// </summary>
+        private static void BuildPromoBanners(Transform parent)
+        {
+            var anchor = new Vector2(1f, 0f);   // bottom-right, sat above the deploy row height
+
+            // KAAL PASS.
+            Transform pass = Panel(parent, "KaalPass", anchor,
+                new Vector2(-170f, 340f), new Vector2(300f, 72f), BorderGold);
+
+            TMP_Text passName = UiKit.MakeText(pass, "PassName", "KAAL PASS", 13f,
+                UiKit.Gold, new Vector2(0.5f, 0.5f), new Vector2(0f, 20f));
+            passName.fontStyle = FontStyles.Bold;
+            passName.characterSpacing = 6f;
+            passName.rectTransform.sizeDelta = new Vector2(280f, 20f);
+
+            TMP_Text tier = UiKit.MakeText(pass, "PassTier", "22", 22f,
+                UiKit.TextWhite, new Vector2(0.5f, 0.5f), new Vector2(-118f, -14f));
+            tier.fontStyle = FontStyles.Bold;
+            tier.rectTransform.sizeDelta = new Vector2(48f, 28f);
+
+            Image passBar = UiKit.MakeBar(pass, "PassBar", UiKit.Gold,
+                new Vector2(0.5f, 0.5f), new Vector2(30f, -14f), new Vector2(180f, 6f));
+            passBar.fillAmount = 0.64f;   // decorative-only; never driven at runtime
+
+            TMP_Text passMax = UiKit.MakeText(pass, "PassMax", "50", 11f,
+                UiKit.TextDim, new Vector2(0.5f, 0.5f), new Vector2(132f, -14f));
+            passMax.rectTransform.sizeDelta = new Vector2(30f, 18f);
+
+            // EVENTS.
+            Transform events = Panel(parent, "Events", anchor,
+                new Vector2(-170f, 274f), new Vector2(300f, 52f), BorderInk);
+
+            TMP_Text evName = UiKit.MakeText(events, "EventsName", "EVENTS", 13f,
+                UiKit.TextWhite, new Vector2(0.5f, 0.5f), new Vector2(-90f, 8f));
+            evName.fontStyle = FontStyles.Bold;
+            evName.characterSpacing = 6f;
+            evName.alignment = TextAlignmentOptions.Left;
+            evName.rectTransform.sizeDelta = new Vector2(200f, 20f);
+
+            TMP_Text evBlurb = UiKit.MakeText(events, "EventsBlurb", "NIGHT HUNT teaser", 11f,
+                UiKit.TextDim, new Vector2(0.5f, 0.5f), new Vector2(-40f, -12f));
+            evBlurb.alignment = TextAlignmentOptions.Left;
+            evBlurb.rectTransform.sizeDelta = new Vector2(220f, 18f);
+
+            // The red "3" badge, top-right corner of the EVENTS banner.
+            UiKit.MakeRect(parent, "EventsBadge", new Color(0.82f, 0.1f, 0.06f),
+                anchor, new Vector2(-24f, 300f), new Vector2(20f, 20f));
+            TMP_Text badge = UiKit.MakeText(parent, "EventsBadgeText", "3", 12f,
+                UiKit.TextWhite, anchor, new Vector2(-24f, 300f));
+            badge.fontStyle = FontStyles.Bold;
+            badge.rectTransform.sizeDelta = new Vector2(20f, 20f);
+        }
+
+        // ------------------------------------------------------------- mode + the maps
+
+        /// <summary>
+        /// Bottom-left: the mode card (map thumbnail + SURVIVAL label + "ISLAND · Solo" + a gear
+        /// glyph) sitting above the two real map buttons. The web mockup opens a picker overlay
+        /// from this card; uGUI has no runtime picker in LobbyScreen and adding one would need new
+        /// runtime code, so the simpler, LobbyScreen-safe path is taken: the two real map buttons
+        /// (mapAButton / mapBButton) sit visible just under the mode card, small, and LobbyScreen
+        /// drives them directly the way it always has. The mode card itself is decorative.
+        /// </summary>
+        private static void BuildModeAndMaps(Transform parent, LobbyScreen lobby)
+        {
+            var anchor = new Vector2(0f, 0f);   // bottom-left
+
+            // The mode card — decorative header for the map choice below it.
+            Transform mode = Panel(parent, "ModeCard", anchor,
+                new Vector2(210f, 320f), new Vector2(380f, 64f));
+
+            // The map-thumbnail block down the card's left.
+            UiKit.MakeRect(mode, "ModeThumb", new Color(0.10f, 0.22f, 0.12f),
+                new Vector2(0.5f, 0.5f), new Vector2(-158f, 0f), new Vector2(64f, 44f));
+
+            TMP_Text modeName = UiKit.MakeText(mode, "ModeName", "SURVIVAL", 11f,
+                UiKit.Gold, new Vector2(0.5f, 0.5f), new Vector2(-20f, 12f));
+            modeName.alignment = TextAlignmentOptions.Left;
+            modeName.characterSpacing = 6f;
+            modeName.rectTransform.sizeDelta = new Vector2(240f, 18f);
+
+            TMP_Text modeMap = UiKit.MakeText(mode, "ModeMap", "ISLAND · Solo", 18f,
+                UiKit.TextWhite, new Vector2(0.5f, 0.5f), new Vector2(-20f, -12f));
+            modeMap.alignment = TextAlignmentOptions.Left;
+            modeMap.fontStyle = FontStyles.Bold;
+            modeMap.rectTransform.sizeDelta = new Vector2(240f, 24f);
+
+            // A gear hint on the right. The project font has no ⚙ glyph and would render a tofu
+            // box, so it is drawn as a small ring: a dim square with a darker square punched into
+            // it. Purely a hint that this card is the door to the mode/map choice.
+            UiKit.MakeRect(mode, "ModeGearRing", UiKit.TextDim,
+                new Vector2(0.5f, 0.5f), new Vector2(168f, 0f), new Vector2(20f, 20f));
+            UiKit.MakeRect(mode, "ModeGearHole", PanelBlack,
+                new Vector2(0.5f, 0.5f), new Vector2(168f, 0f), new Vector2(10f, 10f));
+
+            // The two real map buttons, small, under the mode card. These carry the wired
+            // mapAButton / mapBButton / outlines / status texts that LobbyScreen reads.
+            (Button btn, Image outline, TMP_Text status) a = MapChip(parent, "MapA",
+                "ISLAND", new Color(0.10f, 0.22f, 0.12f), anchor, new Vector2(115f, 250f));
+
+            (Button btn, Image outline, TMP_Text status) b = MapChip(parent, "MapB",
+                "ARENA", new Color(0.20f, 0.18f, 0.15f), anchor, new Vector2(305f, 250f));
 
             ArenaSceneBuilder.SetPrivate(lobby, "mapAButton", a.btn);
             ArenaSceneBuilder.SetPrivate(lobby, "mapAOutline", a.outline);
@@ -535,18 +829,14 @@ namespace Game.EditorTools
         }
 
         /// <summary>
-        /// One map card: a flat colour for a thumbnail, the name, a line about it, and an outline
-        /// that goes gold when selected.
-        ///
-        /// The thumbnail is a colour rather than a screenshot on purpose. A real one means a
-        /// menu item that opens each map, points a camera at it and writes a PNG — worth doing,
-        /// and worth doing as its own thing rather than smuggled into the lobby. A stock jungle
-        /// photo off the web would be the actual lie: it would show a map that is not this map.
+        /// One small map button: a thumbnail colour, the map name, an outline that goes gold when
+        /// selected, and a status line above it for the "NOT BUILT" message LobbyScreen writes.
+        /// The status text sits above the chip so it does not collide with the DEPLOY row below.
         /// </summary>
-        private static (Button, Image, TMP_Text) MapCard(Transform parent, string name,
-            string title, string blurb, Color thumb, Vector2 anchor, Vector2 pos)
+        private static (Button, Image, TMP_Text) MapChip(Transform parent, string name,
+            string title, Color thumb, Vector2 anchor, Vector2 pos)
         {
-            var size = new Vector2(400f, 140f);
+            var size = new Vector2(180f, 84f);
 
             Image outline = UiKit.MakeRect(parent, name + "Outline", UiKit.GoldDim,
                 anchor, pos, size + new Vector2(6f, 6f));
@@ -569,30 +859,21 @@ namespace Game.EditorTools
             colors.disabledColor = new Color(0.4f, 0.4f, 0.4f, 0.5f);
             btn.colors = colors;
 
-            // The thumbnail: a colour block down the left of the card, with the text beside it.
-            // A colour rather than a screenshot, because a real one needs a menu item that opens
-            // each map, points a camera at it and writes a PNG — worth doing, and worth doing as
-            // its own thing. A stock jungle photo would be the actual lie: it would show a map
-            // that is not this map.
+            // A colour block for the thumbnail — a real screenshot means rendering each map to a
+            // PNG, its own job; a stock photo would show a map that is not this map.
             UiKit.MakeRect(go.transform, "Thumb", thumb, new Vector2(0f, 0.5f),
-                new Vector2(70f, 0f), new Vector2(120f, 120f));
+                new Vector2(46f, 0f), new Vector2(64f, 56f));
 
-            TMP_Text titleText = UiKit.MakeText(go.transform, "Title", title, 26f,
-                UiKit.TextWhite, new Vector2(0f, 0.5f), new Vector2(285f, 26f));
+            TMP_Text titleText = UiKit.MakeText(go.transform, "Title", title, 18f,
+                UiKit.TextWhite, new Vector2(0f, 0.5f), new Vector2(128f, 0f));
             titleText.alignment = TextAlignmentOptions.Left;
             titleText.fontStyle = FontStyles.Bold;
-            titleText.characterSpacing = 6f;
-            titleText.rectTransform.sizeDelta = new Vector2(250f, 34f);
+            titleText.characterSpacing = 3f;
+            titleText.rectTransform.sizeDelta = new Vector2(110f, 30f);
 
-            TMP_Text blurbText = UiKit.MakeText(go.transform, "Blurb", blurb, 14f,
-                UiKit.TextDim, new Vector2(0f, 0.5f), new Vector2(285f, -18f));
-            blurbText.alignment = TextAlignmentOptions.TopLeft;
-            blurbText.rectTransform.sizeDelta = new Vector2(250f, 60f);
-            blurbText.enableWordWrapping = true;
-
-            TMP_Text status = UiKit.MakeText(parent, name + "Status", "", 14f,
-                new Color(0.95f, 0.5f, 0.3f), anchor, pos + new Vector2(0f, -84f));
-            status.rectTransform.sizeDelta = new Vector2(400f, 36f);
+            TMP_Text status = UiKit.MakeText(parent, name + "Status", "", 12f,
+                new Color(0.95f, 0.5f, 0.3f), anchor, pos + new Vector2(0f, 60f));
+            status.rectTransform.sizeDelta = new Vector2(190f, 40f);
             status.enableWordWrapping = true;
 
             return (btn, outline, status);
@@ -601,20 +882,21 @@ namespace Game.EditorTools
         // ----------------------------------------------------------------------- play
 
         /// <summary>
-        /// DEPLOY, bottom right, under the maps. It is the largest, brightest thing on the screen
-        /// after the soldier, because it is the only button anyone came here to press.
+        /// DEPLOY, bottom-left now, under the mode card and map buttons. It is the largest,
+        /// brightest thing on the screen after the soldier, because it is the only button anyone
+        /// came here to press. The loading block moves with it.
         /// </summary>
         private static void BuildPlayPanel(Transform parent, LobbyScreen lobby)
         {
-            var anchor = new Vector2(1f, 0f);   // bottom-right
+            var anchor = new Vector2(0f, 0f);   // bottom-left
 
-            // Ember orange, not gold, and bigger — this is the button the whole scene is lit
-            // to point at, and the web mockup's blood-and-fire palette runs right through it.
+            // Ember orange, not gold, and big — this is the button the whole scene is lit to
+            // point at, and the web mockup's blood-and-fire palette runs right through it.
             var ember = new Color(1f, 0.52f, 0.14f);
 
             Button play = UiKit.MakeButton(parent, "Play", "DEPLOY",
                 ember, new Color(0.12f, 0.04f, 0.01f),
-                anchor, new Vector2(-240f, 96f), new Vector2(440f, 88f), 38f);
+                anchor, new Vector2(210f, 130f), new Vector2(380f, 84f), 38f);
 
             // The loading block, hidden until DEPLOY. Same shape as the login's, because the
             // island genuinely takes seconds and a frozen screen with no bar reads as a crash.
@@ -652,20 +934,101 @@ namespace Game.EditorTools
 
         // ------------------------------------------------------------------ top right
 
+        /// <summary>
+        /// The two live buttons the web mockup does not draw but LobbyScreen needs: SETTINGS
+        /// (opens the settings panel) and SIGN OUT. They sit at the top-right, tucked to the left
+        /// of the currency/rail column so they clear it, small and quiet — the real controls among
+        /// the decorative storefront.
+        /// </summary>
         private static void BuildTopRight(Transform parent, LobbyScreen lobby)
         {
             var anchor = new Vector2(1f, 1f);
 
             Button settings = UiKit.MakeButton(parent, "Settings", "SETTINGS",
                 new Color(0.16f, 0.15f, 0.13f), UiKit.TextWhite,
-                anchor, new Vector2(-130f, -60f), new Vector2(200f, 52f), 18f);
+                anchor, new Vector2(-500f, -44f), new Vector2(150f, 40f), 15f);
 
             Button signOut = UiKit.MakeButton(parent, "SignOut", "SIGN OUT",
                 new Color(0.16f, 0.13f, 0.13f), UiKit.TextDim,
-                anchor, new Vector2(-130f, -120f), new Vector2(200f, 44f), 16f);
+                anchor, new Vector2(-500f, -90f), new Vector2(150f, 36f), 14f);
 
             ArenaSceneBuilder.SetPrivate(lobby, "settingsButton", settings);
             ArenaSceneBuilder.SetPrivate(lobby, "signOutButton", signOut);
+        }
+
+        // ------------------------------------------------------------------ squad bar
+
+        /// <summary>
+        /// Bottom-centre, left of the chat: the squad bar — four slots, slot one is you
+        /// (JASSI200), the other three pulse-empty in the web mockup. Decorative: there is no
+        /// multiplayer, so the slots are drawn but not wired. Sat left of dead centre so it clears
+        /// the soldier's feet, the way the web mockup positions it.
+        /// </summary>
+        private static void BuildSquadBar(Transform parent)
+        {
+            var anchor = new Vector2(0.5f, 0f);
+            Transform bar = Panel(parent, "SquadBar", anchor,
+                new Vector2(-360f, 66f), new Vector2(320f, 68f), BorderInk);
+
+            SquadSlot(bar, "Slot0", "JASSI200", true, new Vector2(-114f, 0f));
+            SquadSlot(bar, "Slot1", "+", false, new Vector2(-38f, 0f));
+            SquadSlot(bar, "Slot2", "+", false, new Vector2(38f, 0f));
+            SquadSlot(bar, "Slot3", "+", false, new Vector2(114f, 0f));
+        }
+
+        private static void SquadSlot(Transform parent, string name, string label,
+            bool filled, Vector2 pos)
+        {
+            var mid = new Vector2(0.5f, 0.5f);
+
+            UiKit.MakeRect(parent, name + "Border", filled ? UiKit.GoldDim : BorderInk,
+                mid, pos, new Vector2(68f, 52f));
+            UiKit.MakeRect(parent, name + "Tile",
+                filled ? new Color(0.10f, 0.09f, 0.08f, 0.9f)
+                       : new Color(0.03f, 0.03f, 0.03f, 0.55f),
+                mid, pos, new Vector2(64f, 48f));
+
+            if (filled)
+            {
+                TMP_Text who = UiKit.MakeText(parent, name + "Name", label, 10f,
+                    UiKit.TextWhite, mid, pos + new Vector2(0f, 6f));
+                who.fontStyle = FontStyles.Bold;
+                who.rectTransform.sizeDelta = new Vector2(64f, 16f);
+
+                TMP_Text lvl = UiKit.MakeText(parent, name + "Lvl", "LVL 14", 9f,
+                    UiKit.Gold, mid, pos + new Vector2(0f, -8f));
+                lvl.rectTransform.sizeDelta = new Vector2(64f, 14f);
+            }
+            else
+            {
+                TMP_Text plus = UiKit.MakeText(parent, name + "Plus", "+", 22f,
+                    UiKit.TextDim, mid, pos);
+                plus.rectTransform.sizeDelta = new Vector2(64f, 48f);
+            }
+        }
+
+        // ------------------------------------------------------------------ chat strip
+
+        /// <summary>
+        /// Bottom-centre, right of the squad bar: a single-line chat strip. Decorative — no
+        /// multiplayer means no chat, so it is drawn but not wired.
+        /// </summary>
+        private static void BuildChatStrip(Transform parent)
+        {
+            var anchor = new Vector2(0.5f, 0f);
+            Transform strip = Panel(parent, "ChatStrip", anchor,
+                new Vector2(120f, 66f), new Vector2(420f, 40f), BorderInk);
+
+            TMP_Text name = UiKit.MakeText(strip, "ChatName", "[Vipin29]:", 13f,
+                UiKit.Gold, new Vector2(0.5f, 0.5f), new Vector2(-150f, 0f));
+            name.alignment = TextAlignmentOptions.Left;
+            name.fontStyle = FontStyles.Bold;
+            name.rectTransform.sizeDelta = new Vector2(120f, 20f);
+
+            TMP_Text text = UiKit.MakeText(strip, "ChatText", "koi squad aao", 13f,
+                UiKit.TextWhite, new Vector2(0.5f, 0.5f), new Vector2(30f, 0f));
+            text.alignment = TextAlignmentOptions.Left;
+            text.rectTransform.sizeDelta = new Vector2(240f, 20f);
         }
 
         private static void BuildLevelUpBanner(Transform parent, LobbyScreen lobby)
