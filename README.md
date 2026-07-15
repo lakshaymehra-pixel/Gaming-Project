@@ -14,6 +14,13 @@ A fresh clone plus a few menu clicks produces the whole game.
 - **BGMI-style TPP/FPP** — third-person by default, switches to first-person on AIM
 - **Horror-themed splash screen** — BGMI-style age warning → studio logo → cinematic
   intro with panic gunfire, creature roars, claw emblem slam, and lightning storm
+- **BGMI-style lobby** — a soldier on a lit plinth in front of a blood moon, with every
+  control floating over the scene in corner-anchored panels rather than boxed in a grid
+- **Real accounts** — username/password sign-in against Firebase Auth (falls back to a
+  local offline mode when Firebase isn't configured), Google/Play Games/Facebook stubbed
+  in and clearly marked not-yet-wired
+- **A profile that remembers you** — level, XP, kills, matches, best wave, all recorded
+  when a match ends and shown back in the lobby
 - **Real audio** — downloaded gunshot bursts, jungle nature recordings, sea waves,
   explosions layered over synthesised ambience
 - **Wave-based survival** — escalating enemy waves on a procedural jungle island
@@ -53,12 +60,20 @@ git clone https://github.com/lakshaymehra-pixel/Gaming-Project.git
    HUD, NavMesh). Takes 1–3 minutes; the editor looks frozen while ~1300 props are
    placed. Let it finish. The Console should print `Jungle: Canopy — placed 340/340`
    style lines and end with `Island built.`
-3. **Game → Build Login Scene** — the BGMI-style login screen (username/guest/Google).
-4. **Game → Build Splash Scene** — the intro. Build it *after* the others because it
-   loads the Login scene behind itself.
-5. Press **▶ Play** from the Splash scene. The flow is:
-   **Splash → Login → Island (game)**. Click inside the Game view once so the cursor
-   locks.
+3. **Game → Build Arena Scene** — the second, faster map.
+4. **Game → Build Lobby Scene** — the soldier, the blood moon, and every floating panel.
+   Build it *after* Island and Arena, since its map cards check whether those two exist.
+5. **Game → Build Login Scene** — username/password sign-in. Build it *after* the lobby,
+   since it hands off to Lobby rather than straight into a map.
+6. **Game → Build Splash Scene** — the intro. Build it *last*, since it loads the Login
+   scene behind itself.
+7. Press **▶ Play** from the Splash scene. The flow is:
+   **Splash → Login → Lobby → the map you pick**. Click inside the Game view once so the
+   cursor locks.
+
+Each builder writes the correct next-scene name and reorders the build settings itself, so
+building in this order gets you a working chain end to end. Building them out of order
+still works — the flow just lags one rebuild behind until you build the later one.
 
 The audio (.wav) files are committed, so no baking is needed on a fresh clone. If you ever
 delete `Assets/Audio`, regenerate with **Game → Bake Weapon Audio** and
@@ -117,6 +132,33 @@ cancels it and keeps the speed. Firing is blocked while sliding.
 
 Real audio: gun burst, single gunshot, explosion, and creature roar clips play alongside
 a synthesised heartbeat-drone whose pulse accelerates from 1.7s to under 1s. Tap to skip.
+
+**Login** — username/password against `AuthService`, which sits in front of Firebase Auth
+when it's configured (see [Login and Firebase](#login-and-firebase) below) and a local
+`PlayerPrefs` account store when it isn't. Google, Play Games and Facebook buttons exist
+and are wired to real Firebase credential flows in code, but need their own SDKs and
+console setup before they'll do anything — tapping one before that just says so instead of
+silently signing you in as a guest.
+
+**Lobby** (`Assets/Scripts/Editor/LobbySceneBuilder.cs`, menu `Game → Build Lobby Scene`) —
+a soldier stands on a lit plinth in front of a blood moon; every other control floats over
+the scene in corner-anchored panels rather than being boxed into a grid, matching the
+structure BGMI's mobile lobby actually uses. Real and working: the player card (name,
+level, XP bar, from `PlayerProfile`), the two map buttons (Island / Arena — a map not yet
+built shows *NOT BUILT* and is disabled instead of silently failing), the DEPLOY button
+with a real async-load progress bar, and Settings (volume, look sensitivity, graphics
+tier, foliage detail). Decorative and not wired to anything yet: the loadout strip's
+secondary/melee slots, TEAM UP, the currency pills, RP/CRATE/SHOP, the KAAL PASS and
+EVENTS banners, the squad bar, and the chat strip — the game has no multiplayer, no
+currency, and no battle pass, and these panels are there to test the *look* of a lobby
+that has them, not to promise they exist.
+
+**Player profile** (`Assets/Scripts/Core/PlayerProfile.cs`) — level, XP, total kills,
+matches played, and best wave, recorded once when a match actually ends (dying, or
+choosing *Return to Lobby* from the pause/game-over screen — restarting from a fresh
+death does not double-count). XP is `kills × 10 + wave × 50`; each level needs
+`500 + 250 × (level − 1)` XP. Stored as one PlayerPrefs entry per player name today;
+shaped so a later move to a real backend is a storage swap, not a rewrite.
 
 **Player** — BGMI-style **TPP/FPP** camera system. Default view is **third-person**
 (camera behind and above the player, body model visible). Pressing **AIM** smoothly
@@ -202,22 +244,25 @@ on when testing a weapon or AI change rather than the level.
 
 ```
 Assets/
-  Scenes/      Splash.unity, Island.unity — generated output, committed
+  Scenes/      Splash, Login, Lobby, Island, Arena — generated output, committed
   Audio/       real + synthesised clips (committed; synth regenerable from the Game menu)
                Splash/   splash-screen-only audio (jungle, guns, heartbeat, etc.)
   Models/      Swat.fbx — Quaternius, CC0 (see Models/README.md)
   Materials/   generated flat-colour materials
   Settings/    WeaponData, terrain data, minimap RT, animator controller,
-               splash sprites + textures (all generated)
+               splash + lobby sprites/textures (all generated)
   Scripts/
-    Core/      Health, IDamageable, GameLoop, AmbienceController, ProceduralWalker
+    Core/      Health, IDamageable, GameLoop, AmbienceController, ProceduralWalker,
+               AuthService, PlayerProfile, GameSettings, SettingsApplier, FoliageDensity,
+               SpectatorCamera
     Player/    PlayerController, PlayerMotor (slide/jump), PlayerLook, PlayerInputHub
     Weapons/   Weapon, WeaponData, WeaponAnimator, RecoilController, TracerPool
     Enemies/   EnemyAI, EnemyAnimator, WaveSpawner
-    UI/        SplashController, HudController, Minimap, VirtualJoystick,
-               TouchLookArea, HoldButton
-    Editor/    ArenaSceneBuilder, IslandSceneBuilder, SplashSceneBuilder, IslandTerrain,
-               JungleFoliage, SoldierFactory, GunAudioBaker, AmbienceBaker
+    UI/        SplashController, LoginScreen, LobbyScreen, LobbyCharacter, SettingsPanel,
+               HudController, Minimap, VirtualJoystick, TouchLookArea, HoldButton
+    Editor/    ArenaSceneBuilder, IslandSceneBuilder, SplashSceneBuilder, LoginSceneBuilder,
+               LobbySceneBuilder, SplashBackdrop, UiKit, IslandTerrain, JungleFoliage,
+               SoldierFactory, GunAudioBaker, AmbienceBaker, FirebaseSetup
                (all under the Game menu)
 ```
 
@@ -322,15 +367,21 @@ Xcode. The project is kept iOS-ready so that step is mechanical when a Mac is av
 | Firebase compiles but every sign-in fails | Email/Password is not enabled in *Authentication → Sign-in method*, or `google-services.json` is missing from `Assets/`, or its package name does not match `com.yaarigames.kaalraat` exactly. |
 | "DllNotFoundException: FirebaseCppApp" | The SDK imported but its Android libraries were never resolved → *Assets → External Dependency Manager → Android Resolver → Force Resolve*. |
 | Enemies stand still, Console warns "no NavMesh within 2m" | The scene has no baked surface, or the spawn points sit off it → **Game → Build Island Scene** to re-bake. An enemy that can't find the mesh disables itself rather than spamming an error every frame. |
-| Splash plays but never enters the game | The Island isn't in the build settings → build the Island scene first, then the splash (it loads the Island behind itself). |
+| Splash plays but never enters the game | The Login scene isn't in the build settings → build Login (and Lobby) before Splash, since it loads Login behind itself. |
+| Login goes straight to a map, skipping the lobby | The Login scene was built before the Lobby scene existed, so its stored next-scene is stale → **Game → Build Login Scene** again. |
+| A map card says NOT BUILT and won't select | That map genuinely isn't in the build settings yet → run **Game → Build Island Scene** or **Build Arena Scene**. |
 
 ---
 
 ## Roadmap (not built yet)
 
-Main menu, pause, settings; weapon switching and pickups; ~~player hands/body model~~
-(done — TPP body visible); grenades; better enemy variety; realistic character models
-(Blender/Mixamo); save/highscores; multiplayer; store-ready polish (icons, signing).
+Weapon switching and pickups; grenades; better enemy variety; realistic character models
+(Blender/Mixamo); real map thumbnails (a menu item that screenshots each map); a real
+squad/currency/battle-pass backend for the lobby's decorative panels, or removing them if
+that never happens; multiplayer; store-ready polish (icons, signing).
+
+Done since this list was last true: ~~player hands/body model~~ (TPP body visible),
+~~main menu~~ (the lobby), ~~save/highscores~~ (the player profile).
 
 ---
 
