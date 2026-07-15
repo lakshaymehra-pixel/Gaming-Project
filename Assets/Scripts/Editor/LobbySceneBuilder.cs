@@ -40,6 +40,24 @@ namespace Game.EditorTools
             if (stage.Soldier != null) Object.DestroyImmediate(stage.Soldier.gameObject);
 
             BuildStage(stage.Camera.transform);
+            BuildBloodMoon(stage.Camera.transform);
+
+            // Bruise the night red. SplashBackdrop lights this as a neutral-cold jungle; the
+            // lobby wants the crimson of the game's own splash, with the blood moon as its
+            // source. Warm fog, warm ambient, and the camera's clear colour pulled toward the
+            // deep red the moon's rim sits in.
+            RenderSettings.fogColor = new Color(0.10f, 0.03f, 0.03f);
+            RenderSettings.fogDensity = 0.03f;
+            RenderSettings.ambientSkyColor = new Color(0.22f, 0.09f, 0.07f);
+            RenderSettings.ambientEquatorColor = new Color(0.14f, 0.05f, 0.04f);
+            RenderSettings.ambientGroundColor = new Color(0.04f, 0.01f, 0.01f);
+
+            var cam = stage.Camera.GetComponent<Camera>();
+            if (cam != null)
+            {
+                cam.clearFlags = CameraClearFlags.SolidColor;
+                cam.backgroundColor = new Color(0.06f, 0.02f, 0.03f);
+            }
 
             new GameObject("Settings", typeof(SettingsApplier));
 
@@ -53,6 +71,8 @@ namespace Game.EditorTools
             // Vignette instead of a flat scrim over everything: the middle of the screen has a
             // man standing in it now, and a wash of dark grey across his face is not a look.
             BuildVignette(c);
+
+            BuildWatermark(c);
 
             var lobby = canvas.gameObject.AddComponent<LobbyScreen>();
 
@@ -115,6 +135,133 @@ namespace Game.EditorTools
             var raw = go.GetComponent<RawImage>();
             raw.texture = tex;
             raw.raycastTarget = false;
+        }
+
+        // ------------------------------------------------------------------- watermark
+
+        /// <summary>
+        /// KAAL RAAT, huge and barely there, across the upper scene. The game's name written
+        /// on its own sky — Roman rather than Devanagari because the project's font has no
+        /// Devanagari glyphs and would render each letter as an empty box.
+        ///
+        /// Placed just under the top bar and behind everything else, so it reads as part of
+        /// the backdrop rather than as a label.
+        /// </summary>
+        private static void BuildWatermark(Transform parent)
+        {
+            TMP_Text mark = UiKit.MakeText(parent, "Watermark", "KAAL RAAT", 150f,
+                new Color(1f, 0.75f, 0.55f, 0.06f), new Vector2(0.5f, 0.72f), Vector2.zero);
+            mark.fontStyle = FontStyles.Bold;
+            mark.characterSpacing = 18f;
+            mark.rectTransform.sizeDelta = new Vector2(1800f, 220f);
+
+            // Behind the panels, in front of the 3D. It is the first UI child, so everything
+            // built after it draws on top.
+            mark.transform.SetAsFirstSibling();
+        }
+
+        // ------------------------------------------------------------------ blood moon
+
+        /// <summary>
+        /// The blood moon, low and enormous behind the soldier. He silhouettes against it —
+        /// a man standing in front of the thing that turned the night red — which is the
+        /// strongest image the lobby has and the one the web mockup was built around.
+        ///
+        /// A world-space quad, not a UI element: it sits behind the soldier in 3D so his
+        /// outline actually cuts into it. Textured with a generated radial gradient — pale hot
+        /// core, through orange, to a near-black bruised rim.
+        /// </summary>
+        private static void BuildBloodMoon(Transform camera)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            go.name = "BloodMoon";
+            Object.DestroyImmediate(go.GetComponent<Collider>());
+
+            // Behind and low, so the soldier's whole body cuts into it — a man in front of the
+            // moon, not under it. Centred just above his feet (Y≈2.6) rather than overhead, and
+            // pushed far back so the disc reads as distant and the fog between softens its edge.
+            //
+            // The height and distance are tied: at 30m the camera's slight downward look puts
+            // the horizon low in frame, and a moon centred at 2.6 with radius ~9 sits its lower
+            // half at the horizon and its upper half rising behind the soldier's torso.
+            Vector3 ahead = camera.position + camera.forward * 30f + camera.right * 0.55f;
+            go.transform.position = new Vector3(ahead.x, 2.6f, ahead.z);
+            go.transform.rotation = Quaternion.LookRotation(go.transform.position - camera.position);
+            go.transform.localScale = Vector3.one * 18f;
+
+            // Guarded, like every other Shader.Find in the project: a null shader makes a
+            // magenta material, and a magenta disc behind the soldier is worse than no moon.
+            Shader shader = Shader.Find("Unlit/Transparent") ?? Shader.Find("Sprites/Default");
+            var mat = new Material(shader) { mainTexture = BloodMoonTexture() };
+            go.GetComponent<Renderer>().sharedMaterial = mat;
+        }
+
+        private static Texture2D BloodMoonTexture()
+        {
+            const string path = "Assets/Settings/T_BloodMoon.asset";
+            var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            if (existing != null) return existing;
+
+            const int size = 256;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                wrapMode = TextureWrapMode.Clamp,
+            };
+
+            var centre = new Vector2(size / 2f, size / 2f);
+            float radius = size / 2f;
+
+            // The colour ramp, core to rim. Offset the centre up-left a touch so the hot spot
+            // is not dead middle — a moon lit evenly reads as a disc, not a sphere.
+            var ramp = new[]
+            {
+                (0.00f, new Color(1.00f, 0.81f, 0.62f)),   // pale hot core
+                (0.26f, new Color(1.00f, 0.58f, 0.27f)),   // orange
+                (0.55f, new Color(0.90f, 0.28f, 0.16f)),   // blood
+                (0.80f, new Color(0.55f, 0.13f, 0.06f)),   // deep
+                (1.00f, new Color(0.25f, 0.05f, 0.02f)),   // bruised rim
+            };
+
+            var hot = new Vector2(size * 0.42f, size * 0.58f);
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float d = Vector2.Distance(new Vector2(x, y), centre) / radius;
+
+                    if (d > 1f)
+                    {
+                        tex.SetPixel(x, y, new Color(0f, 0f, 0f, 0f));   // outside the disc
+                        continue;
+                    }
+
+                    // Shade from the offset hot spot, not the geometric centre.
+                    float shade = Vector2.Distance(new Vector2(x, y), hot) / radius;
+                    Color c = SampleRamp(ramp, Mathf.Clamp01(shade));
+
+                    // Feather the very edge so the disc melts into the sky instead of ending
+                    // on a hard circle.
+                    float a = d > 0.9f ? Mathf.InverseLerp(1f, 0.9f, d) : 1f;
+                    tex.SetPixel(x, y, new Color(c.r, c.g, c.b, a));
+                }
+            }
+
+            tex.Apply();
+            AssetDatabase.CreateAsset(tex, path);
+            return tex;
+        }
+
+        private static Color SampleRamp((float t, Color c)[] ramp, float t)
+        {
+            for (int i = 1; i < ramp.Length; i++)
+            {
+                if (t > ramp[i].t) continue;
+                float span = ramp[i].t - ramp[i - 1].t;
+                float f = span < 1e-5f ? 0f : (t - ramp[i - 1].t) / span;
+                return Color.Lerp(ramp[i - 1].c, ramp[i].c, f);
+            }
+            return ramp[^1].c;
         }
 
         // ---------------------------------------------------------------------- stage
@@ -269,8 +416,10 @@ namespace Game.EditorTools
             cardRt.anchoredPosition = new Vector2(300f, -195f);
             cardRt.sizeDelta = new Vector2(520f, 310f);
 
+            // Blacker and more translucent than before, so the crimson scene glows through the
+            // edges of the panel instead of the panel being a solid slab on top of it.
             var cardImage = cardGo.GetComponent<Image>();
-            cardImage.color = new Color(0.04f, 0.035f, 0.03f, 0.88f);
+            cardImage.color = new Color(0.02f, 0.01f, 0.01f, 0.62f);
             cardImage.raycastTarget = false;
 
             Transform card = cardGo.transform;
@@ -459,9 +608,13 @@ namespace Game.EditorTools
         {
             var anchor = new Vector2(1f, 0f);   // bottom-right
 
+            // Ember orange, not gold, and bigger — this is the button the whole scene is lit
+            // to point at, and the web mockup's blood-and-fire palette runs right through it.
+            var ember = new Color(1f, 0.52f, 0.14f);
+
             Button play = UiKit.MakeButton(parent, "Play", "DEPLOY",
-                UiKit.Gold, new Color(0.06f, 0.05f, 0.04f),
-                anchor, new Vector2(-230f, 90f), new Vector2(406f, 78f), 32f);
+                ember, new Color(0.12f, 0.04f, 0.01f),
+                anchor, new Vector2(-240f, 96f), new Vector2(440f, 88f), 38f);
 
             // The loading block, hidden until DEPLOY. Same shape as the login's, because the
             // island genuinely takes seconds and a frozen screen with no bar reads as a crash.
